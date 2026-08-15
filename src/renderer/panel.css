@@ -1,0 +1,169 @@
+html,
+body {
+  margin: 0;
+  background: transparent;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  color: #f4f1ea;
+}
+
+.panel {
+  margin: 8px;
+  height: calc(100vh - 16px);
+  background: linear-gradient(180deg, #16161d 0%, #0e0e13 100%);
+  border: 1px solid #d4af37;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px 8px;
+}
+
+header p {
+  margin: 2px 0 0;
+  color: #c9b36a;
+  font-size: 12px;
+}
+
+#close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: #2a2a33;
+  color: #fff;
+  cursor: pointer;
+}
+
+nav {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.tab,
+button {
+  border: 0;
+  border-radius: 8px;
+  background: #2a2a33;
+  color: #f4f1ea;
+  cursor: pointer;
+}
+
+.tab {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.tab.active {
+  background: #d4af37;
+  color: #16161d;
+  font-weight: 700;
+}
+
+.page {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  padding: 0 12px 12px;
+  min-height: 0;
+}
+
+.page.active {
+  display: flex;
+}
+
+.log {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.bubble {
+  max-width: 90%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.bubble.batman {
+  background: #242430;
+  align-self: flex-start;
+}
+
+.bubble.you {
+  background: #3a3420;
+  align-self: flex-end;
+}
+
+.bubble.error {
+  background: #3a2020;
+}
+
+form {
+  display: flex;
+  gap: 6px;
+}
+
+input {
+  flex: 1;
+  border: 1px solid #3a3a46;
+  background: #111118;
+  color: #f4f1ea;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+form button,
+#save,
+.actions button {
+  background: #d4af37;
+  color: #16161d;
+  font-weight: 700;
+  padding: 8px 10px;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+}
+
+.ghost,
+.danger {
+  margin-top: 8px;
+  padding: 8px 10px;
+}
+
+.danger {
+  background: #5a1f1f;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.hint {
+  font-size: 11px;
+  color: #9a9178;
+  line-height: 1.4;
+}
+
+p {
+  font-size: 13px;
+  line-height: 1.4;
+}

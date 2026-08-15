@@ -1,0 +1,16 @@
+{
+  "name": "desktop-batman",
+  "version": "1.0.0",
+  "description": "A tiny Batman that wanders your desktop, takes naps, and answers questions.",
+  "main": "src/main.js",
+  "author": "Premshakthi Sekar",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.2.1"
+  }
+}

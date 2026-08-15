@@ -1,0 +1,156 @@
+:root {
+  --cape: #1a1a22;
+  --suit: #2b2b38;
+  --gold: #d4af37;
+  --skin: #f3d2b5;
+}
+
+html,
+body {
+  margin: 0;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+.hero {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  animation: bob 0.42s ease-in-out infinite;
+}
+
+.hero.paused,
+.hero.sleeping {
+  animation: none;
+}
+
+.hero.left .body,
+.hero.left .cape {
+  transform: scaleX(-1);
+}
+
+.cape {
+  position: absolute;
+  left: 22px;
+  top: 38px;
+  width: 52px;
+  height: 42px;
+  background: var(--cape);
+  clip-path: polygon(50% 0, 100% 18%, 86% 100%, 50% 78%, 14% 100%, 0 18%);
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35));
+}
+
+.body {
+  position: absolute;
+  left: 28px;
+  top: 18px;
+  width: 40px;
+  height: 58px;
+}
+
+.ear {
+  position: absolute;
+  top: -10px;
+  width: 10px;
+  height: 16px;
+  background: #111118;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.ear.left {
+  left: 4px;
+}
+
+.ear.right {
+  right: 4px;
+}
+
+.mask {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 32px;
+  height: 24px;
+  background: #111118;
+  border-radius: 12px 12px 10px 10px;
+}
+
+.mask::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  bottom: -6px;
+  width: 16px;
+  height: 10px;
+  background: var(--skin);
+  border-radius: 0 0 8px 8px;
+}
+
+.eye {
+  position: absolute;
+  top: 9px;
+  width: 8px;
+  height: 4px;
+  background: #f4f7ff;
+  border-radius: 2px;
+}
+
+.eye.left {
+  left: 5px;
+}
+
+.eye.right {
+  right: 5px;
+}
+
+.emblem {
+  position: absolute;
+  left: 10px;
+  top: 30px;
+  width: 20px;
+  height: 12px;
+  background: var(--gold);
+  clip-path: polygon(50% 0, 100% 35%, 78% 100%, 50% 78%, 22% 100%, 0 35%);
+}
+
+.boot {
+  position: absolute;
+  bottom: 0;
+  width: 12px;
+  height: 8px;
+  background: #111118;
+  border-radius: 2px 2px 3px 3px;
+}
+
+.boot.left {
+  left: 6px;
+}
+
+.boot.right {
+  right: 6px;
+}
+
+.zzz {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  color: #c9b36a;
+  font: 700 18px/1 Georgia, serif;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
