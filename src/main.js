@@ -82,6 +82,7 @@ function applyPetPosition() {
     width: PET_SIZE,
     height: PET_SIZE,
   });
+  followPanel();
 }
 
 function walkFrozen() {
@@ -127,6 +128,11 @@ function panelPosition() {
   x = clamp(x, area.x, area.x + area.width - PANEL_WIDTH);
   y = clamp(y, area.y, area.y + area.height - PANEL_HEIGHT);
   return { x, y, width: PANEL_WIDTH, height: PANEL_HEIGHT };
+}
+
+function followPanel() {
+  if (!panelWindow || panelWindow.isDestroyed() || !panelWindow.isVisible()) return;
+  panelWindow.setBounds(panelPosition());
 }
 
 function overlayWindowOptions(extra) {

@@ -20,7 +20,9 @@ npm install
 npm start
 ```
 
-Click Batman → **Settings** → Provider **Google Gemini (free)** → paste the key → **Save**.
+Click Batman → **Settings** → Provider **Google Gemini (free)** → paste the key → **Save**. The default model is `gemini-3.7-flash`.
+
+Drag him around the screen. Hover the cursor over him for a backflip or fight stance. A normal click still opens chat.
 
 Optional: set the key in the environment instead of the Settings tab.
 
@@ -29,6 +31,18 @@ Optional: set the key in the environment instead of the Settings tab.
 export GEMINI_API_KEY=your-gemini-key
 npm start
 ```
+
+## Start him again (Mac)
+
+You do **not** need to type the long Terminal commands every time.
+
+1. Open Finder → **batman** folder (usually `Macintosh HD → Users → yourname → batman`).
+2. Double-click **Start Batman.command**.
+3. Leave that window open while he is running.
+
+The first time, macOS may say it cannot open the file. Right-click it → **Open** → **Open**.
+
+Optional: drag **Start Batman.command** to your Dock so you can launch him with one click.
 
 ## Daily use
 
