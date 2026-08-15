@@ -22,13 +22,30 @@ body {
   border: 0;
   padding: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   animation: bob 0.42s ease-in-out infinite;
 }
 
 .hero.paused,
 .hero.sleeping {
   animation: none;
+}
+
+.hero.flip {
+  animation: backflip 0.7s ease-in-out;
+}
+
+.hero.fight {
+  animation: fight-stance 0.7s ease-in-out;
+}
+
+.hero.fight .fist {
+  opacity: 1;
+}
+
+.hero.fight .eye {
+  background: #ffd36a;
+  box-shadow: 0 0 6px #ffd36a;
 }
 
 .hero.left .body,
@@ -137,6 +154,24 @@ body {
   right: 6px;
 }
 
+.fist {
+  position: absolute;
+  top: 34px;
+  width: 9px;
+  height: 9px;
+  background: #111118;
+  border-radius: 2px;
+  opacity: 0;
+}
+
+.fist.left {
+  left: -4px;
+}
+
+.fist.right {
+  right: -4px;
+}
+
 .zzz {
   position: absolute;
   right: 8px;
@@ -152,5 +187,36 @@ body {
   }
   50% {
     transform: translateY(-4px);
+  }
+}
+
+@keyframes backflip {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  45% {
+    transform: translateY(-30px) rotate(-180deg);
+  }
+  100% {
+    transform: translateY(0) rotate(-360deg);
+  }
+}
+
+@keyframes fight-stance {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  18% {
+    transform: translateY(-8px) rotate(-12deg);
+  }
+  36% {
+    transform: translateY(-2px) rotate(14deg);
+  }
+  55% {
+    transform: translateY(-12px) rotate(-8deg);
+  }
+  72% {
+    transform: translateY(-4px) rotate(10deg);
   }
 }

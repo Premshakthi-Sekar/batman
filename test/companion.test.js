@@ -64,9 +64,9 @@ test("askBatman requires an API key", async () => {
   await assert.rejects(() => askBatman({ apiKey: "", userText: "hi" }), /API key/);
 });
 
-test("resolveModel will not send gpt-4o-mini to Gemini", () => {
-  assert.equal(resolveModel("gemini", "gpt-4o-mini"), "gemini-2.5-flash");
-  assert.equal(resolveModel("gemini", "gemini-2.5-flash"), "gemini-2.5-flash");
+test("resolveModel upgrades retired Gemini models", () => {
+  assert.equal(resolveModel("gemini", "gpt-4o-mini"), "gemini-3.7-flash");
+  assert.equal(resolveModel("gemini", "gemini-2.5-flash"), "gemini-3.7-flash");
 });
 
 test("askBatman posts to Gemini by default and returns the reply", async () => {
@@ -89,8 +89,39 @@ test("askBatman posts to Gemini by default and returns the reply", async () => {
   });
   assert.equal(reply, "Gotham is quiet.");
   assert.match(calls[0].url, /generativelanguage.googleapis.com/);
-  assert.match(calls[0].url, /gemini-2.5-flash/);
+  assert.match(calls[0].url, /gemini-3.7-flash/);
   assert.equal(calls[0].options.headers["x-goog-api-key"], "gemini-test");
+});
+
+test("askBatman retries a newer Gemini model when the old one is retired", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (String(url).includes("gemini-3.7-flash")) {
+      return {
+        ok: false,
+        json: async () => ({
+          error: { message: "This model models/gemini-3.7-flash is no longer available to new users." },
+        }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "I am vengeance." }] } }],
+      }),
+    };
+  };
+  const reply = await askBatman({
+    provider: "gemini",
+    apiKey: "gemini-test",
+    model: "gemini-3.7-flash",
+    userText: "hey",
+    fetchImpl,
+  });
+  assert.equal(reply, "I am vengeance.");
+  assert.ok(calls.length >= 2);
+  assert.match(String(calls[1]), /gemini-3\.6-flash/);
 });
 
 test("askBatman posts to OpenAI when that provider is selected", async () => {

@@ -17,6 +17,9 @@ let store;
 let sleepTimer;
 let wanderTimer;
 let paused = false;
+let dragging = false;
+let hovering = false;
+let dragGrab = { x: 0, y: 0 };
 
 const wander = {
   x: 80,
@@ -81,19 +84,23 @@ function applyPetPosition() {
   });
 }
 
+function walkFrozen() {
+  return paused || dragging || hovering || wander.sleeping;
+}
+
 function sendPetState() {
   if (!petWindow || petWindow.isDestroyed()) return;
   petWindow.webContents.send("pet-state", {
     facing: wander.facing,
     sleeping: wander.sleeping,
-    paused,
+    paused: walkFrozen(),
   });
 }
 
 function startWander() {
   stopWander();
   wanderTimer = setInterval(() => {
-    if (paused || wander.sleeping) return;
+    if (walkFrozen()) return;
     moveTowardTarget();
     applyPetPosition();
     sendPetState();
@@ -303,6 +310,36 @@ function registerIpc() {
   ipcMain.on("pet-clicked", () => {
     if (isAsleep(store.get("wakeAt", 0))) return;
     showPanel();
+  });
+
+  ipcMain.on("pet-drag-start", (_event, point) => {
+    dragging = true;
+    dragGrab = {
+      x: Number(point?.screenX || 0) - wander.x,
+      y: Number(point?.screenY || 0) - wander.y,
+    };
+    sendPetState();
+  });
+
+  ipcMain.on("pet-drag-move", (_event, point) => {
+    if (!dragging) return;
+    wander.x = Number(point?.screenX || 0) - dragGrab.x;
+    wander.y = Number(point?.screenY || 0) - dragGrab.y;
+    applyPetPosition();
+  });
+
+  ipcMain.on("pet-drag-end", (_event, payload) => {
+    dragging = false;
+    pickTarget();
+    sendPetState();
+    if (!payload?.dragged && !isAsleep(store.get("wakeAt", 0))) {
+      showPanel();
+    }
+  });
+
+  ipcMain.on("pet-hover", (_event, isHover) => {
+    hovering = Boolean(isHover);
+    sendPetState();
   });
 
   ipcMain.on("close-panel", () => hidePanel());

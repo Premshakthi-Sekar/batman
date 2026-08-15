@@ -12,6 +12,18 @@ contextBridge.exposeInMainWorld("batman", {
   petClicked() {
     ipcRenderer.send("pet-clicked");
   },
+  dragStart(point) {
+    ipcRenderer.send("pet-drag-start", point);
+  },
+  dragMove(point) {
+    ipcRenderer.send("pet-drag-move", point);
+  },
+  dragEnd(payload) {
+    ipcRenderer.send("pet-drag-end", payload);
+  },
+  hover(isHover) {
+    ipcRenderer.send("pet-hover", isHover);
+  },
   closePanel() {
     ipcRenderer.send("close-panel");
   },

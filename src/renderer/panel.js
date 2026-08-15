@@ -10,7 +10,7 @@ const keyHint = document.getElementById("key-hint");
 const keyStatus = document.getElementById("key-status");
 
 const DEFAULTS = {
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3.7-flash",
   openai: "gpt-4o-mini",
 };
 

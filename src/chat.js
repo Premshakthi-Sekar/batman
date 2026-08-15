@@ -1,8 +1,14 @@
 "use strict";
 
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
 const DEFAULT_PROVIDER = "gemini";
+const GEMINI_FALLBACKS = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+];
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -31,10 +37,21 @@ function looksLikeGeminiModel(model) {
   return String(model || "").toLowerCase().includes("gemini");
 }
 
+function looksLikeRetiredGemini(model) {
+  const name = String(model || "").toLowerCase();
+  return (
+    name.startsWith("gemini-1.") ||
+    name.startsWith("gemini-2.") ||
+    name === "gemini-pro" ||
+    name === "gemini-flash" ||
+    name === "gemini-2.5-flash"
+  );
+}
+
 function resolveModel(provider, model) {
   const kind = normalizeProvider(provider);
   const name = String(model || "").trim();
-  if (kind === "gemini" && (!name || looksLikeOpenAIModel(name))) {
+  if (kind === "gemini" && (!name || looksLikeOpenAIModel(name) || looksLikeRetiredGemini(name))) {
     return DEFAULT_GEMINI_MODEL;
   }
   if (kind === "openai" && (!name || looksLikeGeminiModel(name))) {
@@ -128,7 +145,17 @@ async function askOpenAI({ apiKey, model, history, userText, fetchFn }) {
   return parseReply(payload);
 }
 
-async function askGemini({ apiKey, model, history, userText, fetchFn }) {
+function shouldRetryGemini(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("no longer available") ||
+    text.includes("not found") ||
+    text.includes("not supported") ||
+    text.includes("not available to new users")
+  );
+}
+
+async function askGeminiOnce({ apiKey, model, history, userText, fetchFn }) {
   const response = await fetchFn(geminiUrl(model), {
     method: "POST",
     headers: {
@@ -148,6 +175,22 @@ async function askGemini({ apiKey, model, history, userText, fetchFn }) {
     throw new Error(payload?.error?.message || `HTTP ${response.status}`);
   }
   return parseGeminiReply(payload);
+}
+
+async function askGemini({ apiKey, model, history, userText, fetchFn }) {
+  const models = [model, ...GEMINI_FALLBACKS].filter(
+    (name, index, list) => name && list.indexOf(name) === index
+  );
+  let lastError;
+  for (const candidate of models) {
+    try {
+      return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn });
+    } catch (error) {
+      lastError = error;
+      if (!shouldRetryGemini(error.message)) throw error;
+    }
+  }
+  throw lastError || new Error("Gemini has no working model right now.");
 }
 
 async function askBatman({ provider, apiKey, model, history, userText, fetchImpl }) {
@@ -178,6 +221,7 @@ module.exports = {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_OPENAI_MODEL,
   DEFAULT_PROVIDER,
+  GEMINI_FALLBACKS,
   OPENAI_URL,
   SYSTEM_PROMPT,
   normalizeProvider,
