@@ -9,15 +9,15 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/ensure-electron.js",
     "postinstall": "node node_modules/electron/install.js",
     "test": "node --test test/*.test.js"
   },
   "allowScripts": {
     "electron": true
   },
-  "dependencies": {},
-  "devDependencies": {
+  "dependencies": {
     "electron": "^33.2.1"
-  }
+  },
+  "devDependencies": {}
 }

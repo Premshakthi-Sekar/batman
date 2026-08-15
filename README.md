@@ -59,12 +59,19 @@ export PATH="/opt/homebrew/bin:$PATH"
 node -v   # should be v18+ (for example v26), not v6
 ```
 
-If `npm start` says Electron failed to install:
+If `npm start` says Electron failed to install, the binary was not downloaded yet. Pull the latest branch, then:
 
 ```bash
+conda deactivate
+export PATH="/opt/homebrew/bin:$PATH"
 cd ~/batman
+git pull
+rm -rf node_modules
+npm install
 node node_modules/electron/install.js
 npm start
 ```
 
-macOS may ask you to allow the app under **System Settings → Privacy & Security**.
+Wait for the Electron download to finish (it can take a minute). You should then see a tiny Batman on the desktop.
+
+macOS may ask you to allow **Electron** (not Cursor) under **System Settings → Privacy & Security**, at the **bottom** of that page.
