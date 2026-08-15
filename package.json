@@ -5,9 +5,16 @@
   "main": "src/main.js",
   "author": "Premshakthi Sekar",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "electron .",
+    "postinstall": "node node_modules/electron/install.js",
     "test": "node --test test/*.test.js"
+  },
+  "allowScripts": {
+    "electron": true
   },
   "dependencies": {},
   "devDependencies": {

@@ -48,3 +48,23 @@ Sleep is remembered if you quit and reopen before the nap is over. He stays hidd
 ```bash
 npm test
 ```
+
+## Troubleshooting (Mac)
+
+Use Homebrew Node, not Anaconda’s old Node 6. After `brew install node`:
+
+```bash
+conda deactivate
+export PATH="/opt/homebrew/bin:$PATH"
+node -v   # should be v18+ (for example v26), not v6
+```
+
+If `npm start` says Electron failed to install:
+
+```bash
+cd ~/batman
+node node_modules/electron/install.js
+npm start
+```
+
+macOS may ask you to allow the app under **System Settings → Privacy & Security**.
