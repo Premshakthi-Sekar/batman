@@ -158,7 +158,7 @@ function panelPosition() {
 }
 
 function followPanel() {
-  if (!panelWindow || panelWindow.isDestroyed() || !panelWindow.isVisible()) return;
+  if (!panelIsOpen()) return;
   panelWindow.setBounds(panelPosition());
 }
 
@@ -184,6 +184,10 @@ function pinToCurrentSpace(win) {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 }
 
+function panelIsOpen() {
+  return Boolean(panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible());
+}
+
 function showPanel() {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   paused = true;
@@ -203,6 +207,11 @@ function hidePanel() {
   }
   paused = false;
   sendPetState();
+}
+
+function togglePanel() {
+  if (panelIsOpen()) hidePanel();
+  else showPanel();
 }
 
 function currentProvider() {
@@ -360,7 +369,7 @@ function createWindows() {
 function registerIpc() {
   ipcMain.on("pet-clicked", () => {
     if (isAsleep(store.get("wakeAt", 0))) return;
-    showPanel();
+    togglePanel();
   });
 
   ipcMain.on("pet-drag-start", (_event, point) => {
@@ -384,7 +393,7 @@ function registerIpc() {
     pickTarget();
     sendPetState();
     if (!payload?.dragged && !isAsleep(store.get("wakeAt", 0))) {
-      showPanel();
+      togglePanel();
     }
   });
 
