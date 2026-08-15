@@ -26,18 +26,29 @@ function hasBinary() {
   return fs.existsSync(path.join(electronDir, "dist", relative));
 }
 
-function cleanSkipFlags(env) {
-  const next = { ...env };
-  delete next.ELECTRON_SKIP_BINARY_DOWNLOAD;
-  delete next.npm_config_electron_skip_binary_download;
-  return next;
+function run(command, args) {
+  console.log(`$ ${command} ${args.join(" ")}`);
+  const result = spawnSync(command, args, { stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`${command} failed with exit ${result.status}`);
+  }
 }
 
-function requireFromElectron(id) {
-  return require(require.resolve(id, { paths: [electronDir, root] }));
+function zipUrl(version, platform, arch) {
+  const name = `electron-v${version}-${platform}-${arch}.zip`;
+  return {
+    name,
+    url: `https://github.com/electron/electron/releases/download/v${version}/${name}`,
+    mirror: `https://npmmirror.com/mirrors/electron/v${version}/${name}`,
+  };
 }
 
-function downloadFile(url, dest) {
+function downloadWithCurl(url, dest) {
+  run("curl", ["-L", "--fail", "--retry", "3", "--retry-all-errors", "-o", dest, url]);
+}
+
+function downloadWithHttps(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
     const request = (target) => {
@@ -60,67 +71,75 @@ function downloadFile(url, dest) {
   });
 }
 
-async function downloadWithElectronGet(version, platform, arch) {
-  const { downloadArtifact } = requireFromElectron("@electron/get");
-  const extract = requireFromElectron("extract-zip");
-  console.log(`Fetching Electron ${version} (${platform}-${arch})...`);
-  const zipPath = await downloadArtifact({
-    version,
-    artifactName: "electron",
-    platform,
-    arch,
-  });
-  const dist = path.join(electronDir, "dist");
+function extractZip(zipFile, dist) {
   fs.mkdirSync(dist, { recursive: true });
-  await extract(zipPath, { dir: dist });
-  fs.writeFileSync(pathFile, platformPath(platform));
+  if (process.platform === "darwin") {
+    run("ditto", ["-x", "-k", zipFile, dist]);
+    return;
+  }
+  run("unzip", ["-o", zipFile, "-d", dist]);
 }
 
-async function downloadFromGitHub(version, platform, arch) {
-  const extract = requireFromElectron("extract-zip");
-  const name = `electron-v${version}-${platform}-${arch}.zip`;
-  const url = `https://github.com/electron/electron/releases/download/v${version}/${name}`;
+async function fetchZip(version, platform, arch) {
+  const { name, url, mirror } = zipUrl(version, platform, arch);
   const dest = path.join(os.tmpdir(), name);
-  console.log(`Fetching Electron from GitHub: ${url}`);
-  await downloadFile(url, dest);
-  const dist = path.join(electronDir, "dist");
-  fs.mkdirSync(dist, { recursive: true });
-  await extract(dest, { dir: dist });
-  fs.writeFileSync(pathFile, platformPath(platform));
+  const sources = [url, mirror];
+  let lastError;
+  for (const source of sources) {
+    try {
+      console.log(`Downloading Electron ${version} from:`);
+      console.log(`  ${source}`);
+      if (spawnSync("curl", ["--version"], { stdio: "ignore" }).status === 0) {
+        downloadWithCurl(source, dest);
+      } else {
+        await downloadWithHttps(source, dest);
+      }
+      const size = fs.statSync(dest).size;
+      if (size < 1_000_000) {
+        throw new Error(`Download too small (${size} bytes), not the Electron app`);
+      }
+      console.log(`Downloaded ${(size / 1_000_000).toFixed(1)} MB`);
+      return dest;
+    } catch (error) {
+      lastError = error;
+      console.warn(error.message || error);
+    }
+  }
+  throw lastError || new Error("Could not download Electron");
 }
 
 async function ensureBinary() {
-  if (hasBinary()) return;
-
-  if (!fs.existsSync(path.join(electronDir, "package.json"))) {
-    throw new Error("Electron is missing. Run: npm install");
+  if (hasBinary()) {
+    console.log("Electron is already installed.");
+    return;
   }
 
-  const { version } = require(path.join(electronDir, "package.json"));
+  const pkgPath = path.join(electronDir, "package.json");
+  if (!fs.existsSync(pkgPath)) {
+    throw new Error("Electron npm package is missing. Run: npm install");
+  }
+
+  const { version } = require(pkgPath);
   const platform = os.platform();
   const arch = os.arch();
+  const dist = path.join(electronDir, "dist");
 
-  delete process.env.ELECTRON_SKIP_BINARY_DOWNLOAD;
-  delete process.env.npm_config_electron_skip_binary_download;
-
-  try {
-    await downloadWithElectronGet(version, platform, arch);
-  } catch (error) {
-    console.warn(error.message || error);
-    console.warn("Official downloader failed, trying GitHub...");
-    await downloadFromGitHub(version, platform, arch);
-  }
+  console.log(`Need Electron ${version} for ${platform}-${arch}`);
+  const zipFile = await fetchZip(version, platform, arch);
+  extractZip(zipFile, dist);
+  fs.writeFileSync(pathFile, platformPath(platform));
 
   if (!hasBinary()) {
-    throw new Error("Electron downloaded, but the Mac app file is still missing.");
+    throw new Error("Unzip finished, but Electron.app is still missing.");
   }
+  console.log("Electron is ready.");
 }
 
 function launch() {
+  console.log("Starting Desktop Batman...");
   const start = spawnSync(process.execPath, [cliJs, "."], {
     stdio: "inherit",
     cwd: root,
-    env: cleanSkipFlags(process.env),
   });
   process.exit(start.status ?? 1);
 }
@@ -130,6 +149,7 @@ ensureBinary()
     if (!downloadOnly) launch();
   })
   .catch((error) => {
+    console.error("\nCould not set up Electron:");
     console.error(error.stack || error.message);
     process.exit(1);
   });
