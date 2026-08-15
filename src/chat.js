@@ -5,9 +5,9 @@ const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
 const DEFAULT_PROVIDER = "gemini";
 const GEMINI_FALLBACKS = [
   "gemini-3.7-flash",
+  "gemini-3.5-flash-lite",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-  "gemini-3.5-flash-lite",
 ];
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -155,6 +155,30 @@ function shouldRetryGemini(message) {
   );
 }
 
+function isBusyGemini(message) {
+  const text = String(message || "").toLowerCase();
+  return (
+    text.includes("high demand") ||
+    text.includes("try again later") ||
+    text.includes("resource exhausted") ||
+    text.includes("rate limit") ||
+    text.includes("unavailable") ||
+    text.includes("overloaded")
+  );
+}
+
+function friendlyGeminiError(error) {
+  if (isBusyGemini(error?.message)) {
+    return new Error("Gotham's radio is jammed. Gemini is busy — wait a few seconds and ask again.");
+  }
+  return error;
+}
+
+function wait(ms, sleepImpl) {
+  const sleep = sleepImpl || ((delay) => new Promise((resolve) => setTimeout(resolve, delay)));
+  return sleep(ms);
+}
+
 async function askGeminiOnce({ apiKey, model, history, userText, fetchFn }) {
   const response = await fetchFn(geminiUrl(model), {
     method: "POST",
@@ -177,23 +201,30 @@ async function askGeminiOnce({ apiKey, model, history, userText, fetchFn }) {
   return parseGeminiReply(payload);
 }
 
-async function askGemini({ apiKey, model, history, userText, fetchFn }) {
+async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl }) {
   const models = [model, ...GEMINI_FALLBACKS].filter(
     (name, index, list) => name && list.indexOf(name) === index
   );
   let lastError;
   for (const candidate of models) {
-    try {
-      return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn });
-    } catch (error) {
-      lastError = error;
-      if (!shouldRetryGemini(error.message)) throw error;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn });
+      } catch (error) {
+        lastError = error;
+        if (isBusyGemini(error.message)) {
+          await wait(400 * (attempt + 1), sleepImpl);
+          continue;
+        }
+        if (shouldRetryGemini(error.message)) break;
+        throw error;
+      }
     }
   }
-  throw lastError || new Error("Gemini has no working model right now.");
+  throw friendlyGeminiError(lastError || new Error("Gemini has no working model right now."));
 }
 
-async function askBatman({ provider, apiKey, model, history, userText, fetchImpl }) {
+async function askBatman({ provider, apiKey, model, history, userText, fetchImpl, sleepImpl }) {
   const key = String(apiKey || "").trim();
   const kind = normalizeProvider(provider);
   if (!key) {
@@ -213,7 +244,7 @@ async function askBatman({ provider, apiKey, model, history, userText, fetchImpl
   if (kind === "openai") {
     return askOpenAI({ apiKey: key, model: resolved, history, userText, fetchFn });
   }
-  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn });
+  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn, sleepImpl });
 }
 
 module.exports = {

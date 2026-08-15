@@ -121,7 +121,36 @@ test("askBatman retries a newer Gemini model when the old one is retired", async
   });
   assert.equal(reply, "I am vengeance.");
   assert.ok(calls.length >= 2);
-  assert.match(String(calls[1]), /gemini-3\.6-flash/);
+  assert.match(String(calls[1]), /gemini-3\.5-flash-lite/);
+});
+
+test("askBatman retries when Gemini is busy then answers", async () => {
+  let hits = 0;
+  const fetchImpl = async () => {
+    hits += 1;
+    if (hits === 1) {
+      return {
+        ok: false,
+        json: async () => ({
+          error: { message: "This model is currently experiencing high demand. Please try again later." },
+        }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "Stand by." }] } }],
+      }),
+    };
+  };
+  const reply = await askBatman({
+    apiKey: "gemini-test",
+    userText: "status?",
+    fetchImpl,
+    sleepImpl: async () => {},
+  });
+  assert.equal(reply, "Stand by.");
+  assert.equal(hits, 2);
 });
 
 test("askBatman posts to OpenAI when that provider is selected", async () => {
