@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "node scripts/ensure-electron.js",
-    "postinstall": "node node_modules/electron/install.js",
+    "postinstall": "node scripts/ensure-electron.js --download-only",
     "test": "node --test test/*.test.js"
   },
   "allowScripts": {
