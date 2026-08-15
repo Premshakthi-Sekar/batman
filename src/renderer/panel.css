@@ -116,7 +116,8 @@ form {
   gap: 6px;
 }
 
-input {
+input,
+select {
   flex: 1;
   border: 1px solid #3a3a46;
   background: #111118;

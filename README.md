@@ -6,29 +6,27 @@ A tiny Batman lives on your desktop. He wanders around the screen on his own. Cl
 
 - Walks randomly around your screen, always on top
 - Click him to open a small panel
-- **Ask**: type a question and he answers through OpenAI (Batman GPT)
+- **Ask**: type a question and he answers through **Google Gemini** (free) or OpenAI
 - **Sleep**: hide him for 2, 3, or 4 hours. When the timer ends, he comes back on patrol
-- **Settings**: paste your OpenAI API key (saved only on this computer)
+- **Settings**: paste a Gemini or OpenAI API key (saved only on this computer)
 - Tray icon: sleep, wake, ask, or quit even if you cannot see him
 
 ## Run it
 
-You need Node.js 18+ and an OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys).
+You need Node.js 18+ and a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). OpenAI still works if you have billing credit.
 
 ```bash
 npm install
 npm start
 ```
 
+Click Batman → **Settings** → Provider **Google Gemini (free)** → paste the key → **Save**.
+
 Optional: set the key in the environment instead of the Settings tab.
 
 ```bash
 # macOS / Linux
-export OPENAI_API_KEY=sk-your-key
-npm start
-
-# Windows PowerShell
-$env:OPENAI_API_KEY="sk-your-key"
+export GEMINI_API_KEY=your-gemini-key
 npm start
 ```
 

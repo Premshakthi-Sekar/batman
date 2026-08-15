@@ -46,17 +46,24 @@
 
       <section id="settings" class="page">
         <label>
-          OpenAI API key
-          <input id="api-key" type="password" placeholder="sk-..." autocomplete="off" />
+          Provider
+          <select id="provider">
+            <option value="gemini">Google Gemini (free)</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </label>
+        <label>
+          <span id="key-label">Gemini API key</span>
+          <input id="api-key" type="password" placeholder="Paste key" autocomplete="off" />
         </label>
         <label>
           Model
-          <input id="model" type="text" value="gpt-4o-mini" />
+          <input id="model" type="text" value="gemini-2.5-flash" />
         </label>
-        <p class="hint">
-          Get a key from platform.openai.com. It stays on this computer only.
-          You can also set the OPENAI_API_KEY environment variable.
+        <p id="key-hint" class="hint">
+          Get a free key at aistudio.google.com/apikey. It stays on this computer only.
         </p>
+        <p id="key-status" class="hint"></p>
         <button id="save" type="button">Save</button>
       </section>
     </div>

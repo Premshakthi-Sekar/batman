@@ -6,7 +6,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { sleepUntil, remainingMs, isAsleep, formatRemaining, HOUR_MS } = require("../src/sleep");
-const { buildMessages, parseReply, askBatman } = require("../src/chat");
+const { buildMessages, parseReply, parseGeminiReply, askBatman } = require("../src/chat");
 const { createStore } = require("../src/store");
 
 test("sleepUntil is two, three, or four hours later", () => {
@@ -44,6 +44,15 @@ test("buildMessages adds the batman system prompt and trims history", () => {
   assert.ok(messages.length <= 18);
 });
 
+test("parseGeminiReply reads Gemini candidate text", () => {
+  assert.equal(
+    parseGeminiReply({
+      candidates: [{ content: { parts: [{ text: " I am vengeance. " }] } }],
+    }),
+    "I am vengeance."
+  );
+});
+
 test("parseReply reads OpenAI chat content", () => {
   const reply = parseReply({
     choices: [{ message: { content: " I am vengeance. " } }],
@@ -55,24 +64,48 @@ test("askBatman requires an API key", async () => {
   await assert.rejects(() => askBatman({ apiKey: "", userText: "hi" }), /API key/);
 });
 
-test("askBatman posts to OpenAI and returns the reply", async () => {
+test("askBatman posts to Gemini by default and returns the reply", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
     return {
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: "Gotham is quiet." } }],
+        candidates: [{ content: { parts: [{ text: "Gotham is quiet." }] } }],
       }),
     };
   };
   const reply = await askBatman({
-    apiKey: "sk-test",
+    apiKey: "gemini-test",
     userText: "status?",
     history: [],
     fetchImpl,
   });
   assert.equal(reply, "Gotham is quiet.");
+  assert.match(calls[0].url, /generativelanguage.googleapis.com/);
+  assert.match(calls[0].url, /gemini-2.5-flash/);
+  assert.equal(calls[0].options.headers["x-goog-api-key"], "gemini-test");
+});
+
+test("askBatman posts to OpenAI when that provider is selected", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "I am vengeance." } }],
+      }),
+    };
+  };
+  const reply = await askBatman({
+    provider: "openai",
+    apiKey: "sk-test",
+    userText: "status?",
+    history: [],
+    fetchImpl,
+  });
+  assert.equal(reply, "I am vengeance.");
   assert.match(calls[0].url, /chat\/completions/);
   assert.match(calls[0].options.headers.Authorization, /sk-test/);
 });

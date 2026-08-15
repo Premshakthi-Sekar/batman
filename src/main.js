@@ -4,7 +4,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require
 const path = require("path");
 const { createStore } = require("./store");
 const { sleepUntil, isAsleep, remainingMs, formatRemaining } = require("./sleep");
-const { askBatman, DEFAULT_MODEL } = require("./chat");
+const { askBatman, DEFAULT_GEMINI_MODEL, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor } = require("./chat");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 340;
@@ -140,15 +140,29 @@ function hidePanel() {
   sendPetState();
 }
 
+function currentProvider() {
+  return normalizeProvider(store.get("provider", DEFAULT_PROVIDER));
+}
+
+function currentApiKey() {
+  const provider = currentProvider();
+  if (provider === "openai") {
+    return store.get("openaiKey", store.get("apiKey", process.env.OPENAI_API_KEY || ""));
+  }
+  return store.get("geminiKey", process.env.GEMINI_API_KEY || "");
+}
+
 function publicState() {
   const wakeAt = store.get("wakeAt", 0);
   const asleep = isAsleep(wakeAt);
+  const provider = currentProvider();
   return {
     asleep,
     remaining: formatRemaining(wakeAt),
     remainingMs: remainingMs(wakeAt),
-    hasKey: Boolean(String(store.get("apiKey", "")).trim()),
-    model: store.get("model", DEFAULT_MODEL),
+    hasKey: Boolean(String(currentApiKey()).trim()),
+    provider,
+    model: store.get("model", defaultModelFor(provider)),
   };
 }
 
@@ -306,19 +320,27 @@ function registerIpc() {
   });
 
   ipcMain.handle("save-settings", (_event, payload) => {
-    if (payload && typeof payload.apiKey === "string") {
-      store.set("apiKey", payload.apiKey.trim());
+    if (!payload || typeof payload !== "object") return publicState();
+    const provider = normalizeProvider(payload.provider || currentProvider());
+    store.set("provider", provider);
+    if (typeof payload.apiKey === "string" && payload.apiKey.trim()) {
+      if (provider === "openai") store.set("openaiKey", payload.apiKey.trim());
+      else store.set("geminiKey", payload.apiKey.trim());
     }
-    if (payload && typeof payload.model === "string" && payload.model.trim()) {
+    if (typeof payload.model === "string" && payload.model.trim()) {
       store.set("model", payload.model.trim());
+    } else {
+      store.set("model", defaultModelFor(provider));
     }
     return publicState();
   });
 
   ipcMain.handle("ask", async (_event, userText) => {
+    const provider = currentProvider();
     const reply = await askBatman({
-      apiKey: store.get("apiKey", process.env.OPENAI_API_KEY || ""),
-      model: store.get("model", DEFAULT_MODEL),
+      provider,
+      apiKey: currentApiKey(),
+      model: store.get("model", defaultModelFor(provider)),
       history: store.get("history", []),
       userText,
     });
@@ -339,7 +361,8 @@ app.whenReady().then(() => {
     app.dock.hide();
   }
   store = createStore(storePath());
-  if (!store.get("model")) store.set("model", DEFAULT_MODEL);
+  if (!store.get("provider")) store.set("provider", DEFAULT_PROVIDER);
+  if (!store.get("model")) store.set("model", DEFAULT_GEMINI_MODEL);
   if (!store.get("history")) store.set("history", []);
 
   createWindows();

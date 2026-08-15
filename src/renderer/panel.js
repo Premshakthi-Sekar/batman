@@ -4,6 +4,15 @@ const prompt = document.getElementById("prompt");
 const form = document.getElementById("ask-form");
 const apiKey = document.getElementById("api-key");
 const model = document.getElementById("model");
+const provider = document.getElementById("provider");
+const keyLabel = document.getElementById("key-label");
+const keyHint = document.getElementById("key-hint");
+const keyStatus = document.getElementById("key-status");
+
+const DEFAULTS = {
+  gemini: "gemini-2.5-flash",
+  openai: "gpt-4o-mini",
+};
 
 function showTab(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -14,10 +23,27 @@ function showTab(name) {
   });
 }
 
+function describeProvider(value) {
+  const kind = value === "openai" ? "openai" : "gemini";
+  if (kind === "openai") {
+    keyLabel.textContent = "OpenAI API key";
+    apiKey.placeholder = "sk-...";
+    keyHint.textContent =
+      "Get a key from platform.openai.com. This one usually requires billing credit.";
+  } else {
+    keyLabel.textContent = "Gemini API key";
+    apiKey.placeholder = "Paste Gemini key";
+    keyHint.textContent = "Get a free key at aistudio.google.com/apikey. It stays on this computer only.";
+  }
+}
+
 function applyState(state) {
   if (!state) return;
   status.textContent = state.asleep ? `Sleeping · ${state.remaining} left` : "On patrol";
+  if (state.provider) provider.value = state.provider;
+  describeProvider(provider.value);
   if (state.model) model.value = state.model;
+  keyStatus.textContent = state.hasKey ? "A key is already saved for this provider." : "No key saved yet.";
 }
 
 function addBubble(role, text) {
@@ -27,6 +53,14 @@ function addBubble(role, text) {
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
 }
+
+provider.addEventListener("change", () => {
+  describeProvider(provider.value);
+  const other = provider.value === "openai" ? DEFAULTS.gemini : DEFAULTS.openai;
+  if (!model.value || model.value === other || Object.values(DEFAULTS).includes(model.value)) {
+    model.value = DEFAULTS[provider.value];
+  }
+});
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => showTab(tab.dataset.tab));
@@ -53,10 +87,12 @@ document.getElementById("quit").addEventListener("click", () => {
 document.getElementById("save").addEventListener("click", async () => {
   applyState(
     await window.batman.saveSettings({
+      provider: provider.value,
       apiKey: apiKey.value,
       model: model.value,
     })
   );
+  apiKey.value = "";
   addBubble("batman", "Settings saved. I will remember.");
   showTab("chat");
 });
