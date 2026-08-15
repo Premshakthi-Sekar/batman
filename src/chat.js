@@ -22,6 +22,27 @@ function defaultModelFor(provider) {
   return normalizeProvider(provider) === "openai" ? DEFAULT_OPENAI_MODEL : DEFAULT_GEMINI_MODEL;
 }
 
+function looksLikeOpenAIModel(model) {
+  const name = String(model || "").toLowerCase();
+  return name.startsWith("gpt-") || name.startsWith("o1") || name.startsWith("o3") || name.startsWith("chatgpt");
+}
+
+function looksLikeGeminiModel(model) {
+  return String(model || "").toLowerCase().includes("gemini");
+}
+
+function resolveModel(provider, model) {
+  const kind = normalizeProvider(provider);
+  const name = String(model || "").trim();
+  if (kind === "gemini" && (!name || looksLikeOpenAIModel(name))) {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  if (kind === "openai" && (!name || looksLikeGeminiModel(name))) {
+    return DEFAULT_OPENAI_MODEL;
+  }
+  return name || defaultModelFor(kind);
+}
+
 function buildMessages(history, userText) {
   const text = String(userText || "").trim();
   if (!text) {
@@ -145,10 +166,11 @@ async function askBatman({ provider, apiKey, model, history, userText, fetchImpl
     throw new Error("This environment cannot reach the chat API.");
   }
 
+  const resolved = resolveModel(kind, model);
   if (kind === "openai") {
-    return askOpenAI({ apiKey: key, model, history, userText, fetchFn });
+    return askOpenAI({ apiKey: key, model: resolved, history, userText, fetchFn });
   }
-  return askGemini({ apiKey: key, model, history, userText, fetchFn });
+  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn });
 }
 
 module.exports = {
@@ -160,6 +182,7 @@ module.exports = {
   SYSTEM_PROMPT,
   normalizeProvider,
   defaultModelFor,
+  resolveModel,
   buildMessages,
   buildGeminiContents,
   parseReply,

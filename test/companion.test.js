@@ -6,7 +6,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { sleepUntil, remainingMs, isAsleep, formatRemaining, HOUR_MS } = require("../src/sleep");
-const { buildMessages, parseReply, parseGeminiReply, askBatman } = require("../src/chat");
+const { buildMessages, parseReply, parseGeminiReply, askBatman, resolveModel } = require("../src/chat");
 const { createStore } = require("../src/store");
 
 test("sleepUntil is two, three, or four hours later", () => {
@@ -64,6 +64,11 @@ test("askBatman requires an API key", async () => {
   await assert.rejects(() => askBatman({ apiKey: "", userText: "hi" }), /API key/);
 });
 
+test("resolveModel will not send gpt-4o-mini to Gemini", () => {
+  assert.equal(resolveModel("gemini", "gpt-4o-mini"), "gemini-2.5-flash");
+  assert.equal(resolveModel("gemini", "gemini-2.5-flash"), "gemini-2.5-flash");
+});
+
 test("askBatman posts to Gemini by default and returns the reply", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
@@ -77,6 +82,7 @@ test("askBatman posts to Gemini by default and returns the reply", async () => {
   };
   const reply = await askBatman({
     apiKey: "gemini-test",
+    model: "gpt-4o-mini",
     userText: "status?",
     history: [],
     fetchImpl,

@@ -4,7 +4,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require
 const path = require("path");
 const { createStore } = require("./store");
 const { sleepUntil, isAsleep, remainingMs, formatRemaining } = require("./sleep");
-const { askBatman, DEFAULT_GEMINI_MODEL, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor } = require("./chat");
+const { askBatman, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor, resolveModel } = require("./chat");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 340;
@@ -162,7 +162,7 @@ function publicState() {
     remainingMs: remainingMs(wakeAt),
     hasKey: Boolean(String(currentApiKey()).trim()),
     provider,
-    model: store.get("model", defaultModelFor(provider)),
+    model: resolveModel(provider, store.get("model")),
   };
 }
 
@@ -328,7 +328,7 @@ function registerIpc() {
       else store.set("geminiKey", payload.apiKey.trim());
     }
     if (typeof payload.model === "string" && payload.model.trim()) {
-      store.set("model", payload.model.trim());
+      store.set("model", resolveModel(provider, payload.model.trim()));
     } else {
       store.set("model", defaultModelFor(provider));
     }
@@ -340,7 +340,7 @@ function registerIpc() {
     const reply = await askBatman({
       provider,
       apiKey: currentApiKey(),
-      model: store.get("model", defaultModelFor(provider)),
+      model: resolveModel(provider, store.get("model")),
       history: store.get("history", []),
       userText,
     });
@@ -362,7 +362,7 @@ app.whenReady().then(() => {
   }
   store = createStore(storePath());
   if (!store.get("provider")) store.set("provider", DEFAULT_PROVIDER);
-  if (!store.get("model")) store.set("model", DEFAULT_GEMINI_MODEL);
+  store.set("model", resolveModel(currentProvider(), store.get("model")));
   if (!store.get("history")) store.set("history", []);
 
   createWindows();
