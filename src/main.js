@@ -129,12 +129,37 @@ function panelPosition() {
   return { x, y, width: PANEL_WIDTH, height: PANEL_HEIGHT };
 }
 
+function overlayWindowOptions(extra) {
+  return {
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    fullscreenable: false,
+    hiddenInMissionControl: true,
+    acceptFirstMouse: true,
+    ...(process.platform === "darwin" ? { type: "panel" } : {}),
+    ...extra,
+  };
+}
+
+function pinToCurrentSpace(win) {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+}
+
 function showPanel() {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   paused = true;
   sendPetState();
+  pinToCurrentSpace(petWindow);
+  pinToCurrentSpace(panelWindow);
   panelWindow.setBounds(panelPosition());
-  panelWindow.show();
+  panelWindow.showInactive();
+  if (typeof panelWindow.moveTop === "function") panelWindow.moveTop();
   panelWindow.focus();
   panelWindow.webContents.send("panel-data", publicState());
 }
@@ -234,7 +259,7 @@ function updateTray() {
       label: "Show Batman",
       enabled: !asleep,
       click: () => {
-        if (petWindow && !petWindow.isDestroyed()) petWindow.show();
+        if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
       },
     },
     { label: "Ask Batman", click: () => { if (asleep) wakeUp(); showPanel(); } },
@@ -256,47 +281,40 @@ function createWindows() {
   wander.y = area.y + Math.round(area.height * 0.65);
   pickTarget();
 
-  petWindow = new BrowserWindow({
-    width: PET_SIZE,
-    height: PET_SIZE,
-    x: Math.round(wander.x),
-    y: Math.round(wander.y),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    hasShadow: false,
-    focusable: true,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  petWindow.setAlwaysOnTop(true, "screen-saver");
-  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  petWindow = new BrowserWindow(
+    overlayWindowOptions({
+      width: PET_SIZE,
+      height: PET_SIZE,
+      x: Math.round(wander.x),
+      y: Math.round(wander.y),
+      focusable: true,
+      show: false,
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    })
+  );
+  pinToCurrentSpace(petWindow);
   petWindow.loadFile(path.join(__dirname, "renderer", "pet.html"));
   petWindow.on("closed", () => {
     petWindow = null;
   });
 
-  panelWindow = new BrowserWindow({
-    ...panelPosition(),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  panelWindow.setAlwaysOnTop(true, "screen-saver");
+  panelWindow = new BrowserWindow(
+    overlayWindowOptions({
+      ...panelPosition(),
+      focusable: true,
+      show: false,
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    })
+  );
+  pinToCurrentSpace(panelWindow);
   panelWindow.loadFile(path.join(__dirname, "renderer", "panel.html"));
   panelWindow.on("blur", () => {
     // Keep chat open while typing; only hide if user clicked away and panel requests it.
@@ -394,8 +412,11 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
-  if (process.platform === "darwin" && app.dock) {
-    app.dock.hide();
+  if (process.platform === "darwin") {
+    if (typeof app.setActivationPolicy === "function") {
+      app.setActivationPolicy("accessory");
+    }
+    if (app.dock) app.dock.hide();
   }
   store = createStore(storePath());
   if (!store.get("provider")) store.set("provider", DEFAULT_PROVIDER);
@@ -411,7 +432,7 @@ app.whenReady().then(() => {
       showPanel();
       return;
     }
-    if (petWindow && !petWindow.isDestroyed()) petWindow.show();
+    if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
   });
   updateTray();
 
