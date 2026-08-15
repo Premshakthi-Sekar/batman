@@ -1,6 +1,8 @@
 "use strict";
 
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require("electron");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { createStore } = require("./store");
 const { sleepUntil, isAsleep, remainingMs, formatRemaining } = require("./sleep");
@@ -9,6 +11,31 @@ const { askBatman, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor, resolve
 const PET_SIZE = 96;
 const PANEL_WIDTH = 340;
 const PANEL_HEIGHT = 460;
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+}
+
+function pidFilePath() {
+  return path.join(os.homedir(), ".desktop-batman.pid");
+}
+
+function writePid() {
+  try {
+    fs.writeFileSync(pidFilePath(), String(process.pid));
+  } catch {
+    // ignore
+  }
+}
+
+function clearPid() {
+  try {
+    fs.unlinkSync(pidFilePath());
+  } catch {
+    // ignore
+  }
+}
 
 let petWindow;
 let panelWindow;
@@ -418,6 +445,13 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  if (!gotLock) return;
+  writePid();
+  app.on("second-instance", () => {
+    if (!store) return;
+    if (isAsleep(store.get("wakeAt", 0))) wakeUp();
+    else if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
+  });
   if (process.platform === "darwin") {
     if (typeof app.setActivationPolicy === "function") {
       app.setActivationPolicy("accessory");
@@ -458,6 +492,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  clearPid();
   stopWander();
   if (sleepTimer) clearTimeout(sleepTimer);
 });

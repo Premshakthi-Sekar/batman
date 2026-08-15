@@ -32,6 +32,18 @@ export GEMINI_API_KEY=your-gemini-key
 npm start
 ```
 
+## Start him from the Mac menu bar
+
+This puts a bat 🦇 in the top-right menu bar (next to Wi‑Fi). It stays there after you quit Batman and after you restart the Mac.
+
+1. Quit Batman if he is running.
+2. In Finder, open the `batman` folder.
+3. Double-click **Install menu bar icon.command**.
+4. If macOS blocks it: right-click → **Open**.
+5. Look at the **top-right** of the screen for 🦇.
+
+**Click the bat** to start him walking. **Right-click** for Quit Batman (stops the character, keeps the bat) or Remove this menu icon.
+
 ## Start him again (Mac)
 
 You do **not** need to type the long Terminal commands every time.
