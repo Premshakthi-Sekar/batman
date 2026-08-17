@@ -196,3 +196,40 @@ test("model filler JSON still salvages the leads task", () => {
   assert.equal(next.tasks.length, 1);
   assert.match(next.tasks[0].text, /leads/i);
 });
+
+test("two Demi call wordings collapse to one", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const messy = [
+    { id: "1", text: "call with Demi", time: "11:00", forDate: "2026-08-18", done: false, createdAt: now.toISOString() },
+    { id: "2", text: "reminder can u call with demi", time: null, forDate: "2026-08-18", done: false, createdAt: now.toISOString() },
+  ];
+  const next = applyPaActions({ tasks: messy, facts: [] }, captureFromUserText("there are 2 call with demi"), now);
+  assert.equal(next.tasks.filter((item) => !item.done).length, 1);
+});
+
+test("delete takes the Demi call off the list and keeps leads", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  let state = applyPaActions({ tasks: [], facts: [] }, captureFromUserText("i have a call with Demi tmrw 11 AM"), now);
+  state = applyPaActions(state, captureFromUserText("add a reminder tmrw to run a fresh leads for demi before call"), now);
+  state = applyPaActions(
+    state,
+    captureFromUserText("there ia a reminder can u call with demi delete that. dont just strike out.. take it off from the list"),
+    now
+  );
+  const open = state.tasks.filter((item) => !item.done);
+  assert.equal(open.length, 1);
+  assert.match(open[0].text, /leads/i);
+  assert.equal(state.tasks.some((item) => /call with demi/i.test(item.text)), false);
+});
+
+test("did u do it replays the delete", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const history = [
+    {
+      role: "user",
+      content: "there ia a reminder can u call with demi delete that. take it off from the list",
+    },
+  ];
+  const actions = captureFromUserText("did u d it", now, history);
+  assert.ok(actions.remove.some((item) => /demi/i.test(item)));
+});

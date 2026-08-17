@@ -167,6 +167,25 @@ function isLikelyTask(text) {
   return Boolean(fingerprint(cleaned) || cleaned.length >= 3);
 }
 
+function isPrepTask(text) {
+  return /\b(leads|prep|prepare|before (the )?call|run fresh|fresh leads)\b/i.test(String(text || ""));
+}
+
+function isCallish(text) {
+  if (isPrepTask(text)) return false;
+  return /\b(call|meeting|meet)\b/i.test(String(text || ""));
+}
+
+function partyName(text) {
+  const cleaned = cleanTitle(text).toLowerCase();
+  const match =
+    cleaned.match(/\b(?:call|meeting|meet)\s+(?:with\s+)?([a-z]{2,})\b/) ||
+    cleaned.match(/\b([a-z]{2,})\s+(?:call|meeting|meet)\b/);
+  const name = match && match[1];
+  if (name && !STOP_WORDS.has(name)) return name;
+  return null;
+}
+
 function sameTask(a, b) {
   if (!a || !b) return false;
   const left = String(a.text || "").toLowerCase().trim();
@@ -174,25 +193,40 @@ function sameTask(a, b) {
   if (left && left === right) return true;
   const ka = fingerprint(cleanTitle(a.text) || a.text);
   const kb = fingerprint(cleanTitle(b.text) || b.text);
-  return Boolean(ka && kb && ka === kb);
+  if (ka && kb && ka === kb) return true;
+  if (isPrepTask(a.text) || isPrepTask(b.text)) return false;
+  const party = partyName(a.text);
+  return Boolean(party && party === partyName(b.text) && isCallish(a.text) && isCallish(b.text));
 }
 
 function looksLikeNudge(text) {
   const lower = String(text || "").toLowerCase();
-  return /\b(did (u|you) add|didn'?t add|did not add|not added|don'?t think you added|dont tink u added|u did not add|you did not add|still not (on|in) the list)\b/.test(
+  return /\b(did (u|you) add|did (u|you) d(o)? it|didn'?t add|did not add|not added|don'?t think you added|dont tink u added|u did not add|you did not add|still not (on|in) the list|still there|it'?s still|its still)\b/.test(
     lower
   );
 }
 
+function looksLikeComplaint(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(already there|not adding|u said|you said|there (are|is|ia)|still there)\b/.test(lower);
+}
+
 function looksLikeNewEvent(text) {
   const lower = String(text || "").toLowerCase();
-  if (looksLikeListEdit(lower) || looksLikeNudge(lower)) return false;
+  if (looksLikeListEdit(lower) || looksLikeNudge(lower) || looksLikeComplaint(lower)) return false;
   const scheduling = /\b(i have|i've got|i got|i've a|remind(er)?( me)?|schedule|add a |add the |add to |put (it |this )?on|don'?t forget|meeting with|call with|todo|to-do|to do)\b/.test(
     lower
   );
   const dated = Boolean(inferDay(lower) || parseClock(lower));
   const action = /\b(run|call|meet|meeting|email|send|prep|prepare|write|buy|pay|review|leads|todo|to-do)\b/.test(lower);
   return (scheduling && (dated || action)) || (dated && action);
+}
+
+function looksLikeHardDelete(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(delete|take (it )?off|remove|off (the|d=)?from the list|from the list|dont just strike|don't just strike|not strike)\b/.test(
+    lower
+  );
 }
 
 function looksLikeListEdit(text) {
@@ -287,6 +321,26 @@ function findTask(list, needle) {
   });
 }
 
+function shouldRemove(item, needle) {
+  const hint = String(needle || "").trim();
+  if (!hint || !item) return false;
+  if (isPrepTask(item.text) && isCallish(hint) && !isPrepTask(hint)) return false;
+  const cleaned = (cleanTitle(hint) || hint).toLowerCase();
+  const title = String(item.text || "").toLowerCase();
+  if (title.includes(cleaned) || cleaned.includes(title)) return true;
+  const fp = fingerprint(cleaned);
+  const other = fingerprint(item.text);
+  if (fp && other && fp === other) return true;
+  const party = partyName(hint);
+  return Boolean(party && party === partyName(item.text) && isCallish(item.text));
+}
+
+function removeTasks(tasks, hints) {
+  const needles = (hints || []).map((item) => String(item || "").trim()).filter(Boolean);
+  if (!needles.length) return Array.isArray(tasks) ? tasks.map((item) => ({ ...item })) : [];
+  return (Array.isArray(tasks) ? tasks : []).filter((item) => !needles.some((needle) => shouldRemove(item, needle)));
+}
+
 function markDone(tasks, hints) {
   const list = Array.isArray(tasks) ? tasks.map((item) => ({ ...item })) : [];
   for (const hint of hints || []) {
@@ -373,7 +427,7 @@ function recordFired(fired, day, slots) {
 }
 
 function emptyActions() {
-  return { addTomorrow: [], addToday: [], done: [], remember: [], update: [], removeDuplicates: false };
+  return { addTomorrow: [], addToday: [], done: [], remember: [], update: [], remove: [], removeDuplicates: false };
 }
 
 function extractPaBlock(text) {
@@ -390,6 +444,7 @@ function extractPaBlock(text) {
         done: Array.isArray(parsed.done) ? parsed.done : [],
         remember: Array.isArray(parsed.remember) ? parsed.remember : [],
         update: Array.isArray(parsed.update) ? parsed.update : [],
+        remove: Array.isArray(parsed.remove) ? parsed.remove : [],
         removeDuplicates: Boolean(parsed.removeDuplicates),
       };
     } catch {
@@ -407,8 +462,23 @@ function extractSubject(text) {
   );
 }
 
-function hasAdds(actions) {
-  return Boolean(actions && (actions.addTomorrow?.length || actions.addToday?.length));
+function extractDeleteTarget(text) {
+  const raw = String(text || "");
+  const named = raw.match(/\b(?:call|meeting)\s+with\s+([a-z]+)/i);
+  if (named) return `call with ${named[1]}`;
+  return extractSubject(raw);
+}
+
+function hasWork(actions) {
+  return Boolean(
+    actions &&
+      (actions.addTomorrow?.length ||
+        actions.addToday?.length ||
+        actions.done?.length ||
+        actions.update?.length ||
+        actions.remove?.length ||
+        actions.removeDuplicates)
+  );
 }
 
 function interpretUserText(text, now = new Date()) {
@@ -422,12 +492,23 @@ function interpretUserText(text, now = new Date()) {
 
   if (looksLikeNudge(lower)) return actions;
 
-  if (/\bduplicates?\b/.test(lower) || (looksLikeListEdit(lower) && /\b(them|those|these|it|the list)\b/.test(lower))) {
+  if (
+    /\bduplicates?\b/.test(lower) ||
+    /\bthere (are|is|ia)\s+\d+\b/.test(lower) ||
+    /\b(2|two)\s+calls?\b/.test(lower) ||
+    (looksLikeComplaint(lower) && /\b(call|demi)\b/.test(lower) && !looksLikeHardDelete(lower))
+  ) {
     actions.removeDuplicates = true;
     return actions;
   }
 
-  if (/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off|take off|remove|delete)\b/.test(lower)) {
+  if (looksLikeHardDelete(lower) || /\b(take off|remove|delete)\b/.test(lower)) {
+    const target = extractDeleteTarget(raw) || subject;
+    if (target) actions.remove.push(target);
+    return actions;
+  }
+
+  if (/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off)\b/.test(lower)) {
     if (subject) actions.done.push(subject);
     return actions;
   }
@@ -451,17 +532,17 @@ function captureFromHistory(history, now = new Date()) {
     const turn = turns[index];
     if (!turn || turn.role !== "user") continue;
     const content = String(turn.content || "").trim();
-    if (!content || looksLikeNudge(content) || looksLikeListEdit(content)) continue;
+    if (!content || looksLikeNudge(content)) continue;
     const captured = interpretUserText(content, now);
-    if (hasAdds(captured)) return captured;
+    if (hasWork(captured)) return captured;
   }
   return emptyActions();
 }
 
 function captureFromUserText(text, now = new Date(), history = []) {
   const direct = interpretUserText(text, now);
-  if (hasAdds(direct) || direct.removeDuplicates || direct.done.length || direct.update.length) return direct;
-  if (looksLikeNudge(text)) return captureFromHistory(history, now);
+  if (hasWork(direct)) return direct;
+  if (looksLikeNudge(text) || looksLikeComplaint(text)) return captureFromHistory(history, now);
   return direct;
 }
 
@@ -472,6 +553,7 @@ function mergeActions(first, second) {
     return {
       ...emptyActions(),
       removeDuplicates: true,
+      remove: [...a.remove, ...b.remove],
       done: [...a.done, ...b.done],
       update: [...a.update, ...b.update],
     };
@@ -482,6 +564,7 @@ function mergeActions(first, second) {
     done: [...a.done, ...b.done],
     remember: [...a.remember, ...b.remember],
     update: [...a.update, ...b.update],
+    remove: [...a.remove, ...b.remove],
     removeDuplicates: false,
   };
 }
@@ -495,6 +578,7 @@ function applyPaActions(state, actions, now = new Date()) {
   }
   tasks = updateTasks(tasks, actions.update, now);
   tasks = markDone(tasks, actions.done);
+  tasks = removeTasks(tasks, actions.remove);
   tasks = tidyTasks(tasks);
   for (const fact of actions.remember || []) {
     const text = String(fact || "").trim();
@@ -504,21 +588,52 @@ function applyPaActions(state, actions, now = new Date()) {
   return { tasks, facts };
 }
 
+function openLines(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).filter((item) => !item.done).map((item) => formatTaskLine(item));
+}
+
+function describeChange(before, after, userText, actions = emptyActions()) {
+  const beforeIds = new Set((before || []).map((item) => item.id));
+  const afterIds = new Set((after || []).map((item) => item.id));
+  const removed = (before || []).filter((item) => !afterIds.has(item.id));
+  const added = (after || []).filter((item) => !beforeIds.has(item.id));
+  const nowOpen = openLines(after);
+  const lines = [];
+  if (removed.length) lines.push(`Removed from the list: ${removed.map((item) => formatTaskLine(item)).join("; ")}`);
+  if (added.length) lines.push(`Added: ${added.map((item) => formatTaskLine(item)).join("; ")}`);
+  lines.push(nowOpen.length ? `Now on the list (${nowOpen.length}): ${nowOpen.join("; ")}` : "The list is now empty.");
+  const deleteHints = [...(actions.remove || [])];
+  if (looksLikeHardDelete(userText) || /\b(delete|take off|remove)\b/i.test(userText)) {
+    deleteHints.push(extractDeleteTarget(userText));
+  }
+  if (deleteHints.length) {
+    const still = (after || []).filter((item) => !item.done && deleteHints.some((hint) => shouldRemove(item, hint)));
+    if (still.length) {
+      lines.push(`FAILED: still on the list: ${still.map((item) => formatTaskLine(item)).join("; ")}. Do not say it is gone.`);
+    } else if (removed.length) {
+      lines.push("Delete succeeded. Confirm it is gone. Do not say you will do it later.");
+    }
+  }
+  if (actions.removeDuplicates || /\b(2|two|duplicates?)\b/i.test(userText)) {
+    const calls = (after || []).filter((item) => !item.done && isCallish(item.text));
+    const parties = {};
+    for (const item of calls) {
+      const party = partyName(item.text) || item.text;
+      parties[party] = (parties[party] || 0) + 1;
+    }
+    const extras = Object.entries(parties).filter(([, count]) => count > 1);
+    if (extras.length) lines.push(`FAILED: still duplicated: ${extras.map(([name, count]) => `${name} x${count}`).join("; ")}`);
+    else lines.push("Duplicates collapsed. Confirm only one copy remains.");
+  }
+  return lines.join("\n");
+}
+
 function paInstructions() {
   return [
-    "You are also the user's personal assistant. They will speak naturally.",
-    "ONLY add a task when the user is creating a real to-do. Short titles, no Batman filler.",
-    "Examples: 'I have a call with Demi tmrw 11am' → addTomorrow [{text:'Call with Demi', time:'11:00'}].",
-    "'Add a reminder tmrw to run fresh leads for Demi before the call' → addTomorrow [{text:'Run fresh leads for Demi before the call'}].",
-    "'Move the Demi call to 2pm' → update [{match:'Demi', time:'14:00'}].",
-    "'Done with the Demi call' → done ['Demi'].",
-    "'Take off the duplicate' / 'did you add?' → do not invent a new task. removeDuplicates only for duplicates; otherwise leave arrays empty.",
-    "Never copy the user's complaint, your own reply, or these instructions into addToday or addTomorrow.",
-    "Two different Demi tasks can exist (the call vs prep/leads). Do not merge those.",
-    "Use 24-hour HH:MM times. tmrw/tomorrow = addTomorrow. today = addToday.",
-    "End EVERY reply with this machine line, even if arrays are empty:",
-    '<<PA>>{"addTomorrow":[],"addToday":[],"done":[],"remember":[],"update":[],"removeDuplicates":false}<<ENDPA>>',
-    "Never mention that machine line to the user.",
+    "The to-do list engine already ran BEFORE you speak. You do not mutate the list.",
+    "Read GROUND TRUTH. Only describe what it says. Never say 'updating', 'I will add', or 'done' unless GROUND TRUTH says the change succeeded.",
+    "If GROUND TRUTH says FAILED, admit it is still there. Do not pretend.",
+    "Keep answers short. No machine JSON.",
   ].join(" ");
 }
 
@@ -547,5 +662,7 @@ module.exports = {
   mergeActions,
   applyPaActions,
   tidyTasks,
+  removeTasks,
+  describeChange,
   paInstructions,
 };

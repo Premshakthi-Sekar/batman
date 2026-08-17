@@ -21,10 +21,10 @@ const {
   recordFired,
   extractPaBlock,
   captureFromUserText,
-  mergeActions,
   applyPaActions,
   tasksForDate,
   tidyTasks,
+  describeChange,
 } = require("./pa");
 
 const PET_SIZE = 96;
@@ -262,8 +262,8 @@ function publicState() {
     model: resolveModel(provider, store.get("model")),
     today: dateKey(now),
     tomorrow: tomorrowKey(now),
-    tasksToday: tasksForDate(tasks, dateKey(now)),
-    tasksTomorrow: tasksForDate(tasks, tomorrowKey(now)),
+    tasksToday: tasksForDate(tasks, dateKey(now)).filter((item) => !item.done),
+    tasksTomorrow: tasksForDate(tasks, tomorrowKey(now)).filter((item) => !item.done),
     reminderTimes: reminderTimes(store.get("reminderTimes", DEFAULT_REMINDER_TIMES)),
     facts: store.get("facts", []),
     history: (store.get("history", []) || []).slice(-16),
@@ -510,25 +510,27 @@ function registerIpc() {
   });
 
   ipcMain.handle("ask", async (_event, userText) => {
+    const now = new Date();
+    const history = [...(store.get("history", []) || [])];
+    const before = store.get("tasks", []);
+    const fromChat = captureFromUserText(userText, now, history);
+    const next = applyPaActions({ tasks: before, facts: store.get("facts", []) }, fromChat, now);
+    store.set("tasks", next.tasks);
+    store.set("facts", next.facts);
+    const ground = describeChange(before, next.tasks, userText, fromChat);
+    const contextText = [briefing(next.tasks, next.facts, now), "GROUND TRUTH after applying the user's request:", ground].join(
+      "\n\n"
+    );
     const provider = currentProvider();
-    const contextText = briefing(store.get("tasks", []), store.get("facts", []));
     const raw = await askBatman({
       provider,
       apiKey: currentApiKey(),
       model: resolveModel(provider, store.get("model")),
-      history: store.get("history", []),
+      history,
       userText,
       contextText,
     });
-    const { visible, actions } = extractPaBlock(raw);
-    const fromChat = captureFromUserText(userText, new Date(), store.get("history", []));
-    const next = applyPaActions(
-      { tasks: store.get("tasks", []), facts: store.get("facts", []) },
-      mergeActions(actions, fromChat)
-    );
-    store.set("tasks", next.tasks);
-    store.set("facts", next.facts);
-    const history = store.get("history", []);
+    const { visible } = extractPaBlock(raw);
     history.push({ role: "user", content: String(userText).trim(), at: Date.now() });
     history.push({ role: "assistant", content: visible, at: Date.now() });
     store.set("history", history.slice(-120));
