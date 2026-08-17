@@ -337,7 +337,11 @@ function findTask(list, needle) {
   const open = list.filter((item) => !item.done);
   const cleaned = (cleanTitle(needle) || needle || "").trim().toLowerCase();
   if (!cleaned || isVagueHint(cleaned) || isVagueHint(String(needle || "").trim().toLowerCase())) {
-    return open.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0];
+    const untitled = open.filter((item) => !item.time);
+    if (untitled.length === 1) return untitled[0];
+    const prep = open.filter((item) => isPrepTask(item.text));
+    if (prep.length === 1) return prep[0];
+    return open[open.length - 1];
   }
   let best;
   let bestScore = 0;
@@ -553,7 +557,9 @@ function interpretUserText(text, now = new Date()) {
   ) {
     let match = subject;
     if (/\bleads\b/i.test(raw)) match = "leads";
-    else if (!match || isVagueHint(match) || match.split(/\s+/).length > 8) match = "it";
+    else if (!match || isVagueHint(match) || match.split(/\s+/).length > 8 || /\b(thanks|thank|must|please|still|not)\b/i.test(match)) {
+      match = "it";
+    }
     actions.update.push({ match, time, day: day || undefined });
     return actions;
   }
