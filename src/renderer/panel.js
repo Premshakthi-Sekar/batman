@@ -58,7 +58,7 @@ function renderTaskList(node, items) {
       applyState(await window.batman.toggleTask(item.id));
     });
     const text = document.createElement("span");
-    text.textContent = item.text;
+    text.textContent = item.time ? `${item.time} · ${item.text}` : item.text;
     row.append(box, text);
     node.appendChild(row);
   });

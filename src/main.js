@@ -20,7 +20,10 @@ const {
   dueReminderSlots,
   recordFired,
   extractPaBlock,
+  captureFromUserText,
+  mergeActions,
   applyPaActions,
+  tasksForDate,
 } = require("./pa");
 
 const PET_SIZE = 96;
@@ -257,8 +260,8 @@ function publicState() {
     model: resolveModel(provider, store.get("model")),
     today: dateKey(now),
     tomorrow: tomorrowKey(now),
-    tasksToday: tasks.filter((item) => item.forDate === dateKey(now)),
-    tasksTomorrow: tasks.filter((item) => item.forDate === tomorrowKey(now)),
+    tasksToday: tasksForDate(tasks, dateKey(now)),
+    tasksTomorrow: tasksForDate(tasks, tomorrowKey(now)),
     reminderTimes: reminderTimes(store.get("reminderTimes", DEFAULT_REMINDER_TIMES)),
     facts: store.get("facts", []),
     history: (store.get("history", []) || []).slice(-16),
@@ -516,9 +519,10 @@ function registerIpc() {
       contextText,
     });
     const { visible, actions } = extractPaBlock(raw);
+    const fromChat = captureFromUserText(userText);
     const next = applyPaActions(
       { tasks: store.get("tasks", []), facts: store.get("facts", []) },
-      actions
+      mergeActions(actions, fromChat)
     );
     store.set("tasks", next.tasks);
     store.set("facts", next.facts);

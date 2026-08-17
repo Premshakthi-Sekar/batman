@@ -13,6 +13,9 @@ const {
   extractPaBlock,
   applyPaActions,
   reminderBody,
+  captureFromUserText,
+  parseClock,
+  updateTasks,
 } = require("../src/pa");
 
 test("tomorrowKey is the next calendar day", () => {
@@ -63,6 +66,36 @@ test("applyPaActions writes tomorrow tasks and facts", () => {
 
 test("reminderBody is silent when the day is clear", () => {
   assert.equal(reminderBody([], new Date("2026-08-18T09:00:00")), null);
+});
+
+test("parseClock understands 11am", () => {
+  assert.equal(parseClock("tmrw 11 am"), "11:00");
+  assert.equal(parseClock("2pm"), "14:00");
+});
+
+test("captureFromUserText files a tomorrow call from chat", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const actions = captureFromUserText("i have a call with demi tmrw 11 am", now);
+  assert.equal(actions.addTomorrow[0].time, "11:00");
+  assert.match(actions.addTomorrow[0].text, /demi/i);
+});
+
+test("captureFromUserText marks done and reschedules", () => {
+  const done = captureFromUserText("done with the demi call");
+  assert.ok(done.done.some((item) => /demi/i.test(item)));
+  const moved = captureFromUserText("move the demi call to 2pm");
+  assert.equal(moved.update[0].time, "14:00");
+  const vague = captureFromUserText("change that meeting's time to 3pm");
+  assert.equal(vague.update[0].time, "15:00");
+});
+
+test("updateTasks changes the meeting time", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  let tasks = addTasks([], [{ text: "Call with Demi", time: "11:00" }], "2026-08-18", now);
+  tasks = updateTasks(tasks, [{ match: "demi", time: "14:00" }], now);
+  assert.equal(tasks[0].time, "14:00");
+  tasks = updateTasks(tasks, [{ match: "that meeting", time: "15:00" }], now);
+  assert.equal(tasks[0].time, "15:00");
 });
 
 test("toggleTask flips done", () => {
