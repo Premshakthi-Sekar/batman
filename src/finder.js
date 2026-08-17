@@ -8,11 +8,39 @@ const MAX_HITS = 8;
 const SKIP = [
   "/Library/Caches",
   "/Library/Logs",
+  "/Library/Cookies",
+  "/Library/Keychains",
+  "/Library/Mail",
+  "/Library/Messages",
+  "/Library/Accounts",
+  "/Library/IdentityServices",
   "/Library/Application Support/Google",
+  "/Library/Application Support/Firefox",
+  "/Library/Application Support/BraveSoftware",
+  "/Library/Application Support/Chromium",
+  "/Library/Application Support/Arc",
+  "/Library/Application Support/Microsoft Edge",
+  "/Library/Application Support/1Password",
+  "/Library/Application Support/Bitwarden",
   "/node_modules/",
   "/.git/",
   "/.Trash",
   "/Trash/",
+  "/.ssh/",
+  "/.gnupg/",
+  "/.aws/",
+  "/.kube/",
+  "/.docker/",
+  "/.npmrc",
+  "/.netrc",
+  "/.config/gh/",
+  "/.password-store",
+  "/.local/share/keyrings",
+  "/Login Data",
+  "/id_rsa",
+  "/id_ed25519",
+  "/credentials.json",
+  "/.env",
 ];
 const WEAK_TOKENS = new Set([
   "this",
@@ -67,9 +95,10 @@ function sanitizeNeedle(query) {
 }
 
 function keepPath(filePath, home) {
-  const full = String(filePath || "").trim();
+  const full = String(filePath || "").trim().replace(/\\/g, "/");
   if (!full.startsWith(home)) return false;
-  return !SKIP.some((part) => full.includes(part));
+  const lower = full.toLowerCase();
+  return !SKIP.some((part) => lower.includes(part.toLowerCase()));
 }
 
 function searchRoots(home) {

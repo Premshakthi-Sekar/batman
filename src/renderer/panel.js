@@ -35,11 +35,12 @@ function describeProvider(value) {
     keyLabel.textContent = "OpenAI API key";
     apiKey.placeholder = "sk-...";
     keyHint.textContent =
-      "Get a key from platform.openai.com. This one usually requires billing credit.";
+      "Get a key from platform.openai.com. This one usually requires billing credit. It is stored with the macOS Keychain, not as plain text.";
   } else {
     keyLabel.textContent = "Gemini API key";
     apiKey.placeholder = "Paste Gemini key";
-    keyHint.textContent = "Get a free key at aistudio.google.com/apikey. It stays on this computer only.";
+    keyHint.textContent =
+      "Get a free key at aistudio.google.com/apikey. It is stored with the macOS Keychain, not as plain text.";
   }
 }
 

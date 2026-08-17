@@ -97,3 +97,46 @@ test("remind action from the model arms a ping", () => {
   );
   assert.equal(fromLlm.actions.pings[0].delayMs, 2 * 60 * 1000);
 });
+
+test("certain local ping beats a contradicting LLM add", () => {
+  const decision = decideTurn({
+    userText: "remind me to drink water at 12.53AM today please (in 2 mins)",
+    tasks: [],
+    history: [],
+    llmIntent: {
+      action: "add",
+      title: "totally different task",
+      match: "totally different task",
+      time: null,
+      day: "tomorrow",
+      question: null,
+      confidence: "high",
+    },
+    pending: null,
+    now: new Date("2026-08-17T00:51:00"),
+  });
+  assert.equal(decision.actions.pings.length, 1);
+  assert.match(decision.actions.pings[0].text, /drink water/i);
+  assert.equal((decision.actions.addTomorrow || []).length, 0);
+});
+
+test("local find beats a contradicting LLM add", () => {
+  const decision = decideTurn({
+    userText: "find me invoice.pdf",
+    tasks: [],
+    history: [],
+    llmIntent: {
+      action: "add",
+      title: "invoice.pdf",
+      match: "invoice.pdf",
+      time: null,
+      day: "tomorrow",
+      question: null,
+      confidence: "high",
+    },
+    pending: null,
+    now,
+  });
+  assert.equal(decision.findQuery, "invoice.pdf");
+  assert.equal((decision.actions.addTomorrow || []).length, 0);
+});

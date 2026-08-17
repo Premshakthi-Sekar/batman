@@ -30,6 +30,7 @@ const INTENT_PROMPT = [
   "If they say before the call and a call exists, use one hour before that call unless they gave a time.",
   "Do not add a second copy of a task that already exists; update it.",
   "chat = conversation only, no list change.",
+  "If a local parser already has a clear list edit, live remind, or file hunt, it wins. Do not contradict it.",
 ].join(" ");
 
 function parseIntentReply(raw) {
@@ -199,6 +200,9 @@ function actionsFromIntent(intent, tasks, userText, now) {
   return { actions, chat: true };
 }
 
+// First match wins when local parsers and the LLM disagree:
+// 1. pending 1/2  2. local find  3. LLM find  4. certain local list/ping
+// 5. LLM ask  6. LLM actions  7. remaining local work  8. chat
 function decideTurn({ userText, tasks, history, llmIntent, pending, now }) {
   const local = captureFromUserText(userText, now, history);
   const resolvedPending = resolvePending(pending, userText);
@@ -206,17 +210,22 @@ function decideTurn({ userText, tasks, history, llmIntent, pending, now }) {
     return resolvedPending;
   }
 
-  const findQuery =
-    extractFindQuery(userText) ||
-    (llmIntent?.action === "find" ? llmIntent.title || llmIntent.match : null);
-  if (findQuery) {
-    return { findQuery, actions: emptyActions() };
+  const localFind = extractFindQuery(userText);
+  if (localFind) {
+    return { findQuery: localFind, actions: emptyActions() };
+  }
+  if (llmIntent?.action === "find") {
+    const findQuery = llmIntent.title || llmIntent.match;
+    if (findQuery) return { findQuery, actions: emptyActions() };
   }
   if (looksLikeFindRequest(userText) || llmIntent?.action === "find") {
     return { question: "What file should I hunt? Give me a name, like invoice.pdf.", pending: null };
   }
 
   const certain = localIsCertain(local, tasks);
+  if (certain) {
+    return { actions: local };
+  }
   if (llmIntent?.action === "ask" && llmIntent.question && !certain) {
     const needle = llmIntent.match || userText;
     const rows = rankedMatches(tasks, needle);

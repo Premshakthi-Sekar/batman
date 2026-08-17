@@ -5,6 +5,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createStore } = require("./store");
+const { wrapSecret, unwrapSecret, migrateStoreSecrets, loadSafeStorage } = require("./secrets");
 const { sleepUntil, isAsleep, remainingMs, formatRemaining } = require("./sleep");
 const { askBatman, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor, resolveModel, looksLikeOpenAIKey } = require("./chat");
 const {
@@ -323,8 +324,8 @@ function togglePanel() {
 }
 
 function currentProvider() {
-  const openaiKey = store.get("openaiKey", store.get("apiKey", process.env.OPENAI_API_KEY || ""));
-  const geminiKey = store.get("geminiKey", process.env.GEMINI_API_KEY || "");
+  const openaiKey = readSecret("openaiKey", readSecret("apiKey", process.env.OPENAI_API_KEY || ""));
+  const geminiKey = readSecret("geminiKey", process.env.GEMINI_API_KEY || "");
   if (looksLikeOpenAIKey(openaiKey) || looksLikeOpenAIKey(geminiKey)) return "openai";
   const stored = store.get("provider");
   if (stored) return normalizeProvider(stored);
@@ -332,9 +333,19 @@ function currentProvider() {
   return DEFAULT_PROVIDER;
 }
 
+function readSecret(name, fallback = "") {
+  const fromStore = unwrapSecret(store.get(name), loadSafeStorage());
+  if (fromStore) return fromStore;
+  return fallback;
+}
+
+function writeSecret(name, value) {
+  store.set(name, wrapSecret(value, loadSafeStorage()));
+}
+
 function currentApiKey() {
-  const openaiKey = store.get("openaiKey", store.get("apiKey", process.env.OPENAI_API_KEY || ""));
-  const geminiKey = store.get("geminiKey", process.env.GEMINI_API_KEY || "");
+  const openaiKey = readSecret("openaiKey", readSecret("apiKey", process.env.OPENAI_API_KEY || ""));
+  const geminiKey = readSecret("geminiKey", process.env.GEMINI_API_KEY || "");
   if (currentProvider() === "openai") {
     return looksLikeOpenAIKey(geminiKey) && !String(openaiKey || "").trim() ? geminiKey : openaiKey;
   }
@@ -755,8 +766,8 @@ function registerIpc() {
     if (looksLikeOpenAIKey(incomingKey)) provider = "openai";
     store.set("provider", provider);
     if (incomingKey) {
-      if (provider === "openai") store.set("openaiKey", incomingKey);
-      else store.set("geminiKey", incomingKey);
+      if (provider === "openai") writeSecret("openaiKey", incomingKey);
+      else writeSecret("geminiKey", incomingKey);
     }
     if (typeof payload.model === "string" && payload.model.trim()) {
       store.set("model", resolveModel(provider, payload.model.trim()));
@@ -923,10 +934,11 @@ app.whenReady().then(() => {
     if (app.dock) app.dock.hide();
   }
   store = createStore(storePath());
-  const misplaced = store.get("geminiKey", "");
+  migrateStoreSecrets(store, loadSafeStorage());
+  const misplaced = readSecret("geminiKey");
   if (looksLikeOpenAIKey(misplaced)) {
-    if (!store.get("openaiKey")) store.set("openaiKey", misplaced);
-    store.set("geminiKey", "");
+    if (!readSecret("openaiKey")) writeSecret("openaiKey", misplaced);
+    writeSecret("geminiKey", "");
     store.set("provider", "openai");
   }
   if (!store.get("provider")) store.set("provider", currentProvider());

@@ -211,4 +211,20 @@ test("store round-trips settings", () => {
   const again = createStore(file);
   assert.equal(again.get("apiKey"), "sk-secret");
   fs.unlinkSync(file);
+  try {
+    fs.unlinkSync(`${file}.bak`);
+  } catch {
+    // ignore
+  }
+});
+
+test("store loads the backup if the main file is corrupt", () => {
+  const file = path.join(os.tmpdir(), `batman-store-bak-${Date.now()}.json`);
+  const store = createStore(file);
+  store.set("tasks", [{ id: "1", text: "call with Demi" }]);
+  fs.writeFileSync(file, "{not-json", "utf8");
+  const again = createStore(file);
+  assert.equal(again.get("tasks")[0].text, "call with Demi");
+  fs.unlinkSync(file);
+  fs.unlinkSync(`${file}.bak`);
 });

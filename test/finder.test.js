@@ -73,3 +73,15 @@ test("empty Spotlight still finds an underscore name in Downloads", async () => 
   assert.deepEqual(result.hits, [target]);
   assert.match(formatFindSpoken(result), /Downloads/);
 });
+
+test("keepPath hides ssh, env, and browser profile files", () => {
+  const home = "/Users/prem";
+  assert.equal(keepPath(`${home}/Downloads/offer.pdf`, home), true);
+  assert.equal(keepPath(`${home}/.ssh/id_rsa`, home), false);
+  assert.equal(keepPath(`${home}/proj/.env`, home), false);
+  assert.equal(
+    keepPath(`${home}/Library/Application Support/Google/Chrome/Default/Login Data`, home),
+    false
+  );
+  assert.equal(keepPath(`${home}/Library/Keychains/login.keychain-db`, home), false);
+});
