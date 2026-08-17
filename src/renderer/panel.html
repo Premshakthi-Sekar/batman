@@ -7,10 +7,26 @@
   </head>
   <body>
     <div class="panel">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+      <div class="scan"></div>
+
       <header>
-        <div>
-          <strong>Batman</strong>
-          <p id="status">On patrol</p>
+        <div class="brand">
+          <span class="emblem" aria-hidden="true">
+            <svg viewBox="0 0 512 256">
+              <path
+                d="M256 6 L278 0 286 42 L328 10 316 56 L418 22 506 92 412 86 L500 128 400 120 L486 196 352 154 L392 250 300 188 L256 226 L212 188 120 250 L160 154 26 196 L112 120 12 128 L100 86 6 92 94 22 L196 56 184 10 L226 42 234 0 Z"
+              />
+            </svg>
+          </span>
+          <div>
+            <div class="callsign">WayneTech · Link live</div>
+            <strong>BATMAN</strong>
+            <p id="status">ON PATROL</p>
+          </div>
         </div>
         <button id="close" type="button" aria-label="Close">×</button>
       </header>
@@ -29,7 +45,7 @@
           </div>
         </div>
         <form id="ask-form">
-          <input id="prompt" type="text" placeholder="e.g. remind me to drink water in 2 mins" autocomplete="off" />
+          <input id="prompt" type="text" placeholder="remind me to drink water in 2 mins" autocomplete="off" />
           <button type="submit">Send</button>
         </form>
       </section>
@@ -53,7 +69,7 @@
       </section>
 
       <section id="sleep" class="page">
-        <p>Need him off the screen for a while? He will hide, then come back when the nap is over.</p>
+        <p>Need him off the screen for a while? He hides, then the bat-signal brings him back.</p>
         <div class="actions">
           <button data-hours="2" type="button">Sleep 2 hours</button>
           <button data-hours="3" type="button">Sleep 3 hours</button>
@@ -92,8 +108,8 @@
           </div>
         </label>
         <p class="hint">
-          Keep Batman running (Sleep is fine; full Quit stops reminders). Live pings like “in 2 mins”
-          fire a notification and the red eye-beam.
+          Reminders keep firing during Sleep (notification + red beam). Full Quit stops them.
+          Live pings: “remind me in 2 mins”.
         </p>
         <p id="key-status" class="hint"></p>
         <button id="save" type="button">Save</button>

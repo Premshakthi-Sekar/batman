@@ -28,10 +28,11 @@ const {
 } = require("./pa");
 const { INTENT_PROMPT, parseIntentReply, listSnapshot, decideTurn, spokenResult } = require("./intent");
 const { BEAM_MS, beamLayout } = require("./beam");
+const { SIGNAL_MS } = require("./signal");
 
 const PET_SIZE = 96;
-const PANEL_WIDTH = 340;
-const PANEL_HEIGHT = 520;
+const PANEL_WIDTH = 360;
+const PANEL_HEIGHT = 540;
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -71,6 +72,8 @@ let hovering = false;
 let dragGrab = { x: 0, y: 0 };
 let reminderTimer;
 let pingTimers = new Map();
+let signalWindow;
+let signalTimer;
 
 const wander = {
   x: 80,
@@ -298,6 +301,84 @@ function notify(title, body) {
   }
 }
 
+function closeSignalWindow() {
+  if (signalTimer) {
+    clearTimeout(signalTimer);
+    signalTimer = null;
+  }
+  if (signalWindow && !signalWindow.isDestroyed()) {
+    signalWindow.close();
+  }
+  signalWindow = null;
+}
+
+function playBatSignal(after) {
+  closeSignalWindow();
+  hidePanel();
+  if (petWindow && !petWindow.isDestroyed()) petWindow.hide();
+  const area = screen.getPrimaryDisplay().bounds;
+  signalWindow = new BrowserWindow(
+    overlayWindowOptions({
+      x: area.x,
+      y: area.y,
+      width: area.width,
+      height: area.height,
+      focusable: false,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    })
+  );
+  signalWindow.setIgnoreMouseEvents(true, { forward: true });
+  pinToCurrentSpace(signalWindow);
+  signalWindow.loadFile(path.join(__dirname, "renderer", "signal.html"));
+  signalWindow.once("ready-to-show", () => {
+    if (!signalWindow || signalWindow.isDestroyed()) return;
+    signalWindow.showInactive();
+  });
+  signalWindow.on("closed", () => {
+    signalWindow = null;
+  });
+  signalTimer = setTimeout(() => {
+    closeSignalWindow();
+    if (typeof after === "function") after();
+  }, SIGNAL_MS);
+}
+
+function revealPet() {
+  wander.sleeping = false;
+  paused = false;
+  if (petWindow && !petWindow.isDestroyed()) {
+    pickTarget();
+    applyPetPosition();
+    petWindow.showInactive();
+  }
+  sendPetState();
+  updateTray();
+}
+
+function clearSleepState() {
+  if (store) store.set("wakeAt", 0);
+  if (sleepTimer) {
+    clearTimeout(sleepTimer);
+    sleepTimer = null;
+  }
+}
+
+function summonBatman(after) {
+  clearSleepState();
+  wander.sleeping = true;
+  paused = true;
+  sendPetState();
+  updateTray();
+  playBatSignal(() => {
+    revealPet();
+    if (typeof after === "function") after();
+  });
+}
+
 function closeBeamWindow() {
   if (beamWindow && !beamWindow.isDestroyed()) {
     beamWindow.close();
@@ -380,7 +461,7 @@ function tickReminders() {
   if (!due.length) return;
   const body = reminderBody(tasks, now);
   if (body) {
-    fireReminderBeam();
+    fireReminderBeam({ force: true });
     notify("Batman · daily patrol", body);
   }
   store.set("reminderFired", recordFired(fired, dateKey(now), due));
@@ -442,6 +523,7 @@ function scheduleWake() {
 function putToSleep(hours) {
   const wakeAt = sleepUntil(hours);
   store.set("wakeAt", wakeAt);
+  closeSignalWindow();
   wander.sleeping = true;
   paused = true;
   hidePanel();
@@ -452,20 +534,7 @@ function putToSleep(hours) {
 }
 
 function wakeUp() {
-  store.set("wakeAt", 0);
-  wander.sleeping = false;
-  paused = false;
-  if (sleepTimer) {
-    clearTimeout(sleepTimer);
-    sleepTimer = null;
-  }
-  if (petWindow && !petWindow.isDestroyed()) {
-    pickTarget();
-    applyPetPosition();
-    petWindow.showInactive();
-  }
-  sendPetState();
-  updateTray();
+  summonBatman();
 }
 
 function trayIcon() {
@@ -485,12 +554,9 @@ function updateTray() {
     { type: "separator" },
     {
       label: "Show Batman",
-      enabled: !asleep,
-      click: () => {
-        if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
-      },
+      click: () => summonBatman(),
     },
-    { label: "Ask Batman", click: () => { if (asleep) wakeUp(); showPanel(); } },
+    { label: "Ask Batman", click: () => summonBatman(() => showPanel()) },
     { type: "separator" },
     { label: "Sleep 2 hours", click: () => putToSleep(2) },
     { label: "Sleep 3 hours", click: () => putToSleep(3) },
@@ -743,8 +809,7 @@ app.whenReady().then(() => {
   writePid();
   app.on("second-instance", () => {
     if (!store) return;
-    if (isAsleep(store.get("wakeAt", 0))) wakeUp();
-    else if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
+    summonBatman();
   });
   if (process.platform === "darwin") {
     if (typeof app.setActivationPolicy === "function") {
@@ -772,20 +837,14 @@ app.whenReady().then(() => {
   registerIpc();
 
   tray = new Tray(trayIcon());
-  tray.on("click", () => {
-    if (isAsleep(store.get("wakeAt", 0))) {
-      showPanel();
-      return;
-    }
-    if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
-  });
+  tray.on("click", () => summonBatman());
   updateTray();
 
   if (isAsleep(store.get("wakeAt", 0))) {
     wander.sleeping = true;
     scheduleWake();
   } else {
-    petWindow.showInactive();
+    summonBatman();
   }
   startWander();
   startReminderLoop();
@@ -802,6 +861,7 @@ app.on("before-quit", () => {
   clearPid();
   stopWander();
   closeBeamWindow();
+  closeSignalWindow();
   if (sleepTimer) clearTimeout(sleepTimer);
   if (reminderTimer) clearInterval(reminderTimer);
   clearPingTimers();

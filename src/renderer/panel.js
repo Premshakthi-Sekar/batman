@@ -102,7 +102,7 @@ function applyState(state) {
   if (briefingLine) {
     const open = (state.tasksToday || []).filter((item) => !item.done).length;
     briefingLine.textContent = open
-      ? `${open} open today. Four daily patrols plus any live reminders. Sleep is fine; Quit pauses them.`
+      ? `${open} open today. Patrols and live reminders still fire during Sleep. Quit pauses them.`
       : "No open tasks today. You can still say “remind me in 2 mins” in Ask.";
   }
   renderTaskList(tasksToday, state.tasksToday);

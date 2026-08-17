@@ -2,76 +2,188 @@ html,
 body {
   margin: 0;
   background: transparent;
-  font-family: "Segoe UI", Tahoma, sans-serif;
-  color: #f4f1ea;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: #e8f0ff;
 }
 
 .panel {
+  position: relative;
   margin: 8px;
   height: calc(100vh - 16px);
-  background: linear-gradient(180deg, #16161d 0%, #0e0e13 100%);
-  border: 1px solid #d4af37;
-  border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  background:
+    linear-gradient(180deg, rgba(10, 18, 32, 0.97) 0%, rgba(4, 8, 16, 0.98) 100%);
+  border: 1px solid rgba(120, 210, 255, 0.35);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 18px 50px rgba(0, 0, 0, 0.55),
+    0 0 28px rgba(0, 160, 255, 0.12);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+.panel::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(80, 180, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 180, 255, 0.035) 1px, transparent 1px);
+  background-size: 18px 18px;
+  opacity: 0.45;
+}
+
+.scan {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(90, 200, 255, 0.05) 50%, transparent 100%);
+  background-size: 100% 220%;
+  animation: scan 7s linear infinite;
+  z-index: 2;
+}
+
+.corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 3;
+  border: 1.5px solid #7ad4ff;
+}
+
+.corner.tl {
+  top: 6px;
+  left: 6px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.corner.tr {
+  top: 6px;
+  right: 6px;
+  border-left: 0;
+  border-bottom: 0;
+}
+
+.corner.bl {
+  bottom: 6px;
+  left: 6px;
+  border-right: 0;
+  border-top: 0;
+}
+
+.corner.br {
+  bottom: 6px;
+  right: 6px;
+  border-left: 0;
+  border-top: 0;
+}
+
 header {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px 8px;
+  padding: 14px 16px 10px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand .emblem {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, #fff6c8 0%, #f0c94a 55%, #b8860b 100%);
+  box-shadow: 0 0 12px rgba(240, 201, 74, 0.45);
+  flex-shrink: 0;
+}
+
+.brand .emblem svg {
+  width: 26px;
+  height: 14px;
+  fill: #07070a;
+}
+
+.callsign {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #7ad4ff;
+}
+
+header strong {
+  display: block;
+  font-size: 16px;
+  letter-spacing: 0.28em;
+  font-weight: 700;
 }
 
 header p {
   margin: 2px 0 0;
-  color: #c9b36a;
-  font-size: 12px;
+  color: #f0c94a;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 #close {
   width: 28px;
   height: 28px;
-  border: 0;
-  border-radius: 50%;
-  background: #2a2a33;
-  color: #fff;
+  border: 1px solid rgba(122, 212, 255, 0.35);
+  border-radius: 2px;
+  background: rgba(8, 16, 28, 0.8);
+  color: #7ad4ff;
   cursor: pointer;
 }
 
 nav {
+  position: relative;
+  z-index: 1;
   display: flex;
-  gap: 6px;
-  padding: 0 12px 8px;
+  gap: 4px;
+  padding: 0 14px 10px;
 }
 
 .tab,
 button {
-  border: 0;
-  border-radius: 8px;
-  background: #2a2a33;
-  color: #f4f1ea;
+  border: 1px solid rgba(122, 212, 255, 0.18);
+  border-radius: 2px;
+  background: rgba(12, 22, 38, 0.9);
+  color: #cfe8ff;
   cursor: pointer;
+  letter-spacing: 0.06em;
 }
 
 .tab {
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 7px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .tab.active {
-  background: #d4af37;
-  color: #16161d;
+  background: linear-gradient(180deg, #f0c94a 0%, #c9a227 100%);
+  border-color: #f0c94a;
+  color: #0a1018;
   font-weight: 700;
 }
 
 .page {
+  position: relative;
+  z-index: 1;
   display: none;
   flex: 1;
   flex-direction: column;
-  padding: 0 12px 12px;
+  padding: 0 14px 14px;
   min-height: 0;
 }
 
@@ -91,24 +203,27 @@ button {
 .bubble {
   max-width: 90%;
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: 2px;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.4;
   white-space: pre-wrap;
 }
 
 .bubble.batman {
-  background: #242430;
+  background: rgba(18, 36, 58, 0.95);
+  border: 1px solid rgba(122, 212, 255, 0.22);
   align-self: flex-start;
 }
 
 .bubble.you {
-  background: #3a3420;
+  background: rgba(48, 40, 12, 0.95);
+  border: 1px solid rgba(240, 201, 74, 0.28);
   align-self: flex-end;
 }
 
 .bubble.error {
-  background: #3a2020;
+  background: #3a1518;
+  border-color: #ff5a5a;
 }
 
 form {
@@ -119,20 +234,28 @@ form {
 input,
 select {
   flex: 1;
-  border: 1px solid #3a3a46;
-  background: #111118;
-  color: #f4f1ea;
-  border-radius: 8px;
-  padding: 8px;
+  border: 1px solid rgba(122, 212, 255, 0.28);
+  background: rgba(4, 10, 18, 0.92);
+  color: #e8f0ff;
+  border-radius: 2px;
+  padding: 9px 10px;
+}
+
+input:focus,
+select:focus {
+  outline: 1px solid rgba(122, 212, 255, 0.55);
 }
 
 form button,
 #save,
 .actions button {
-  background: #d4af37;
-  color: #16161d;
+  background: linear-gradient(180deg, #f0c94a 0%, #c9a227 100%);
+  color: #0a1018;
   font-weight: 700;
-  padding: 8px 10px;
+  padding: 8px 12px;
+  border: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .actions {
@@ -146,8 +269,15 @@ form button,
   padding: 8px 10px;
 }
 
+.ghost {
+  background: transparent;
+  color: #7ad4ff;
+}
+
 .danger {
-  background: #5a1f1f;
+  background: #5a1a22;
+  color: #ffd0d4;
+  border-color: #ff5a6a;
 }
 
 label {
@@ -155,19 +285,26 @@ label {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 10px;
-  font-size: 12px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9cc4e0;
 }
 
 .hint {
   font-size: 11px;
-  color: #9a9178;
+  color: #8aa4bc;
   line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 h3 {
   margin: 8px 0 4px;
-  font-size: 12px;
-  color: #d4af37;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7ad4ff;
 }
 
 .task-list {
@@ -184,14 +321,15 @@ h3 {
   align-items: flex-start;
   gap: 8px;
   font-size: 12px;
-  background: #1c1c24;
-  border-radius: 8px;
-  padding: 6px 8px;
+  background: rgba(12, 22, 38, 0.9);
+  border: 1px solid rgba(122, 212, 255, 0.12);
+  border-radius: 2px;
+  padding: 7px 8px;
 }
 
 .task-row.done span {
   text-decoration: line-through;
-  color: #8a8678;
+  color: #6d7d8c;
 }
 
 .task-form,
@@ -209,4 +347,13 @@ h3 {
 p {
   font-size: 13px;
   line-height: 1.4;
+}
+
+@keyframes scan {
+  0% {
+    background-position: 0 -80%;
+  }
+  100% {
+    background-position: 0 180%;
+  }
 }
