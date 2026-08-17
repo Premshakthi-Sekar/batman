@@ -135,10 +135,10 @@ body {
 
 .emblem {
   position: absolute;
-  left: 5px;
-  top: 26px;
-  width: 30px;
-  height: 16px;
+  left: 11px;
+  top: 32px;
+  width: 18px;
+  height: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -148,8 +148,8 @@ body {
 }
 
 .emblem img {
-  width: 30px;
-  height: 16px;
+  width: 18px;
+  height: 9px;
   display: block;
   pointer-events: none;
 }
