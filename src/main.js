@@ -833,17 +833,19 @@ function registerIpc() {
       const found = await searchHome(decision.findQuery);
       const ground = formatFindGround(found);
       let visible = formatFindSpoken(found);
-      try {
-        const raw = await askBatman({
-          ...askOpts,
-          contextText: [
-            ground,
-            "Confirm in a short Batman line, then list every exact path. Do not invent folders.",
-          ].join("\n\n"),
-        });
-        visible = extractPaBlock(raw).visible || visible;
-      } catch {
-        visible = formatFindSpoken(found);
+      if (found.hits.length) {
+        try {
+          const raw = await askBatman({
+            ...askOpts,
+            contextText: [
+              ground,
+              "Confirm in a short Batman line, then list every exact path. Do not invent folders.",
+            ].join("\n\n"),
+          });
+          visible = extractPaBlock(raw).visible || visible;
+        } catch {
+          visible = formatFindSpoken(found);
+        }
       }
       history.push({ role: "user", content: String(userText).trim(), at: Date.now() });
       history.push({ role: "assistant", content: visible, at: Date.now() });

@@ -2,6 +2,7 @@
 
 const { spawn } = require("child_process");
 const os = require("os");
+const path = require("path");
 
 const MAX_HITS = 8;
 const SKIP = [
@@ -13,6 +14,23 @@ const SKIP = [
   "/.Trash",
   "/Trash/",
 ];
+const WEAK_TOKENS = new Set([
+  "this",
+  "that",
+  "file",
+  "files",
+  "doc",
+  "docs",
+  "document",
+  "documents",
+  "pdf",
+  "docx",
+  "xlsx",
+  "pptx",
+  "the",
+  "and",
+  "for",
+]);
 
 function looksLikeFindRequest(text) {
   const raw = String(text || "").trim();
@@ -30,7 +48,7 @@ function extractFindQuery(text) {
     .replace(/\b(can you|could you|please|pls|just|for me)\b/gi, " ")
     .replace(/\b(find me|find the|find my|find this|find)\b/gi, " ")
     .replace(/\b(where is|where's|locate|search (my )?(mac|computer|machine|files?)?\s*(for)?)\b/gi, " ")
-    .replace(/\b(this|that|the|a|an|on my mac|from my mac|in my mac)\b/gi, " ")
+    .replace(/\b(this|that|the|a|an|on my mac|from my mac|in my mac|in (my )?(downloads?|desktop|documents?))\b/gi, " ")
     .replace(/\b(docs?|documents?|files?)\b/gi, " ")
     .replace(/[?!.]+$/g, " ")
     .replace(/\s+/g, " ")
@@ -52,6 +70,43 @@ function keepPath(filePath, home) {
   const full = String(filePath || "").trim();
   if (!full.startsWith(home)) return false;
   return !SKIP.some((part) => full.includes(part));
+}
+
+function searchRoots(home) {
+  return [
+    path.join(home, "Downloads"),
+    path.join(home, "Desktop"),
+    path.join(home, "Documents"),
+    path.join(home, "Library", "CloudStorage"),
+    path.join(home, "Library", "Mobile Documents"),
+  ];
+}
+
+function spotlightNameQuery(needle) {
+  const escaped = String(needle || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `kMDItemFSName == "*${escaped}*"c`;
+}
+
+function globNeedles(query) {
+  const full = sanitizeNeedle(query);
+  const out = [];
+  const push = (value) => {
+    const next = sanitizeNeedle(value).replace(/\*/g, " ").replace(/\s+/g, " ").trim();
+    if (next.length >= 2 && !out.includes(next)) out.push(next);
+  };
+  push(full);
+  const parts = full.split(/[\s._-]+/).filter((part) => part.length >= 3 && !WEAK_TOKENS.has(part.toLowerCase()));
+  if (parts[0] && parts[0].length >= 4) push(parts[0]);
+  return out.slice(0, 3);
+}
+
+function findPatterns(query) {
+  const patterns = globNeedles(query).map((term) => `*${term}*`);
+  const parts = sanitizeNeedle(query)
+    .split(/[\s._-]+/)
+    .filter((part) => part.length >= 3 && !WEAK_TOKENS.has(part.toLowerCase()));
+  if (parts.length >= 2) patterns.push(`*${parts.join("*")}*`);
+  return [...new Set(patterns)].slice(0, 4);
 }
 
 function runCommand(cmd, args, spawnImpl, timeoutMs = 8000) {
@@ -100,41 +155,85 @@ function parseLines(raw) {
     .filter(Boolean);
 }
 
+function uniqHits(hits, home) {
+  const unique = [];
+  const seen = new Set();
+  for (const item of hits) {
+    if (!keepPath(item, home) || seen.has(item)) continue;
+    seen.add(item);
+    unique.push(item);
+    if (unique.length >= MAX_HITS) break;
+  }
+  return unique;
+}
+
 async function searchHome(query, opts = {}) {
   const needle = sanitizeNeedle(query);
   const home = opts.home || os.homedir();
   const spawnImpl = opts.spawn;
   if (!needle) return { query: needle, hits: [] };
 
-  let hits = [];
-  const spotlight = await runCommand("mdfind", ["-onlyin", home, needle], spawnImpl);
-  hits = parseLines(spotlight).filter((item) => keepPath(item, home));
+  const roots = searchRoots(home);
+  const needles = globNeedles(needle);
+  const patterns = findPatterns(needle);
 
-  if (!hits.length) {
-    const fromFind = await runCommand(
+  for (const term of needles) {
+    const nameQuery = spotlightNameQuery(term);
+    const spotlightHome = await runCommand("mdfind", ["-onlyin", home, nameQuery], spawnImpl, 5000);
+    let hits = uniqHits(parseLines(spotlightHome), home);
+    if (hits.length) return { query: needle, hits };
+
+    const downloads = roots[0];
+    const spotlightDownloads = await runCommand("mdfind", ["-onlyin", downloads, nameQuery], spawnImpl, 4000);
+    hits = uniqHits(parseLines(spotlightDownloads), home);
+    if (hits.length) return { query: needle, hits };
+  }
+
+  for (const pattern of patterns) {
+    const fromDownloads = await runCommand("find", [...roots, "-maxdepth", "8", "-iname", pattern], spawnImpl, 8000);
+    let hits = uniqHits(parseLines(fromDownloads), home);
+    if (hits.length) return { query: needle, hits };
+
+    const fromHome = await runCommand(
       "find",
-      [home, "-maxdepth", "5", "-iname", `*${needle}*`],
-      spawnImpl
+      [
+        home,
+        "-maxdepth",
+        "8",
+        "(",
+        "-name",
+        "node_modules",
+        "-o",
+        "-name",
+        ".git",
+        "-o",
+        "-name",
+        ".Trash",
+        "-o",
+        "-path",
+        path.join(home, "Library"),
+        ")",
+        "-prune",
+        "-o",
+        "-iname",
+        pattern,
+        "-print",
+      ],
+      spawnImpl,
+      10000
     );
-    hits = parseLines(fromFind).filter((item) => keepPath(item, home));
+    hits = uniqHits(parseLines(fromHome), home);
+    if (hits.length) return { query: needle, hits };
   }
 
-  const unique = [];
-  const seen = new Set();
-  for (const item of hits) {
-    if (seen.has(item)) continue;
-    seen.add(item);
-    unique.push(item);
-    if (unique.length >= MAX_HITS) break;
-  }
-  return { query: needle, hits: unique };
+  return { query: needle, hits: [] };
 }
 
 function formatFindSpoken(result) {
   const query = result?.query || "";
   const hits = result?.hits || [];
   if (!hits.length) {
-    return `No hits in your home folder for "${query}". Try a file name, like invoice.pdf.`;
+    return `No hits for "${query}" in Downloads, Desktop, Documents, or the rest of your home folder. If the name is longer, paste the full file name including the extension.`;
   }
   if (hits.length === 1) {
     return `Found it.\n${hits[0]}`;
@@ -146,7 +245,7 @@ function formatFindGround(result) {
   const query = result?.query || "";
   const hits = result?.hits || [];
   if (!hits.length) {
-    return `FILE SEARCH GROUND TRUTH: no files named like "${query}" under the home folder. Do not invent a path.`;
+    return `FILE SEARCH GROUND TRUTH: no files named like "${query}" under Downloads, Desktop, Documents, or the home folder. Do not invent a path.`;
   }
   return [
     "FILE SEARCH GROUND TRUTH: quote these exact paths. Do not invent others.",
@@ -160,6 +259,9 @@ module.exports = {
   extractFindQuery,
   sanitizeNeedle,
   keepPath,
+  searchRoots,
+  globNeedles,
+  findPatterns,
   searchHome,
   formatFindSpoken,
   formatFindGround,

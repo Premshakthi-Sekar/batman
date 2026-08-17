@@ -16,6 +16,10 @@ test("find me this doc pulls the file name", () => {
   assert.equal(extractFindQuery("find me this doc invoice.pdf"), "invoice.pdf");
   assert.equal(extractFindQuery("where is tax return"), "tax return");
   assert.equal(extractFindQuery("find me this doc"), null);
+  assert.equal(
+    extractFindQuery("KOYO_MU_Tech_Object_Centric_Addendum_Mar find this"),
+    "KOYO_MU_Tech_Object_Centric_Addendum_Mar"
+  );
   assert.equal(looksLikeFindRequest("remind me to drink water"), false);
 });
 
@@ -48,4 +52,24 @@ test("searchHome uses Spotlight paths and reports the exact location", async () 
   const result = await searchHome("offer letter", { home, spawn });
   assert.deepEqual(result.hits, [`${home}/Documents/offer-letter.pdf`]);
   assert.match(formatFindSpoken(result), /\/Users\/prem\/Documents\/offer-letter\.pdf/);
+});
+
+test("empty Spotlight still finds an underscore name in Downloads", async () => {
+  const home = "/Users/prem";
+  const target = `${home}/Downloads/KOYO_MU_Tech_Object_Centric_Addendum_March.pdf`;
+  const spawn = (cmd, args) => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.kill = () => {};
+    setImmediate(() => {
+      if (cmd === "find" && args.includes(`${home}/Downloads`) && args.some((arg) => String(arg).includes("KOYO"))) {
+        child.stdout.emit("data", `${target}\n`);
+      }
+      child.emit("close", 0);
+    });
+    return child;
+  };
+  const result = await searchHome("KOYO_MU_Tech_Object_Centric_Addendum_Mar", { home, spawn });
+  assert.deepEqual(result.hits, [target]);
+  assert.match(formatFindSpoken(result), /Downloads/);
 });
