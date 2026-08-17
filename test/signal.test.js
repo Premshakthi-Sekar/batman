@@ -5,8 +5,8 @@ const assert = require("node:assert/strict");
 const { SIGNAL_MS } = require("../src/signal");
 const { emblemSvgMarkup } = require("../src/emblem");
 
-test("bat-signal holds long enough to read the emblem", () => {
-  assert.ok(SIGNAL_MS >= 2000);
+test("bat-signal holds long enough for beam then emblem", () => {
+  assert.ok(SIGNAL_MS >= 3200);
 });
 
 test("emblem is the yellow oval with the Batman-curve silhouette", () => {

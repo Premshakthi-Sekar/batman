@@ -11,67 +11,148 @@ body {
 .night {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 110%, rgba(8, 14, 32, 0.22) 0%, rgba(2, 4, 12, 0.55) 55%, rgba(0, 0, 0, 0.72) 100%);
-  animation: sky 2.55s ease-in-out forwards;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(40, 55, 90, 0.28) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(6, 10, 22, 0.55) 0%, rgba(4, 8, 18, 0.72) 55%, rgba(0, 0, 0, 0.82) 100%);
+  animation: sky 3.35s ease-in-out forwards;
 }
 
-.haze {
+.clouds {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 18% 22%, rgba(180, 200, 255, 0.08), transparent 28%),
-    radial-gradient(circle at 82% 18%, rgba(180, 200, 255, 0.06), transparent 32%);
+    radial-gradient(ellipse at 42% 22%, rgba(180, 200, 230, 0.1), transparent 26%),
+    radial-gradient(ellipse at 62% 16%, rgba(160, 180, 220, 0.08), transparent 24%),
+    radial-gradient(ellipse at 50% 28%, rgba(255, 245, 210, 0.06), transparent 30%);
+}
+
+.lamp {
+  position: absolute;
+  right: 7%;
+  bottom: 7%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff8d6;
+  box-shadow:
+    0 0 18px 8px rgba(255, 244, 200, 0.95),
+    0 0 60px 24px rgba(255, 230, 140, 0.45);
+  animation: lamp 3.35s ease-out forwards;
 }
 
 .cone {
   position: absolute;
-  left: 50%;
-  bottom: -8%;
-  width: 78vmin;
-  height: 118%;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(255, 244, 196, 0.58) 0%, rgba(255, 228, 140, 0.18) 42%, rgba(255, 220, 120, 0.04) 100%);
-  clip-path: polygon(46% 100%, 54% 100%, 92% 0%, 8% 0%);
-  filter: blur(0.4px);
+  right: 7.4%;
+  bottom: 8%;
+  width: min(92vmin, 980px);
+  height: min(118vmin, 1100px);
+  transform-origin: 100% 100%;
+  transform: rotate(-36deg);
+  background: linear-gradient(
+    to top,
+    rgba(255, 252, 230, 0.92) 0%,
+    rgba(255, 244, 190, 0.38) 38%,
+    rgba(255, 236, 160, 0.12) 72%,
+    rgba(255, 236, 160, 0.02) 100%
+  );
+  clip-path: polygon(96% 100%, 4% 0%, 78% 0%);
   mix-blend-mode: screen;
-  animation: cone 2.55s ease-out forwards;
+  filter: blur(0.5px);
+  animation: cone 3.35s ease-out forwards;
 }
 
 .disc {
   position: absolute;
   left: 50%;
-  top: 30%;
-  width: min(56vmin, 560px);
-  height: min(28vmin, 280px);
-  transform: translate(-50%, -50%) scale(0.72);
+  top: 26%;
+  width: min(46vmin, 460px);
+  height: min(46vmin, 460px);
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(
-    ellipse at 50% 46%,
-    rgba(255, 252, 230, 0.35) 0%,
-    rgba(255, 236, 160, 0.18) 55%,
-    transparent 72%
+    circle at 50% 46%,
+    rgba(255, 252, 235, 0.96) 0%,
+    rgba(255, 244, 190, 0.55) 42%,
+    rgba(255, 230, 140, 0.12) 68%,
+    transparent 74%
   );
   box-shadow:
-    0 0 40px 18px rgba(255, 236, 150, 0.4),
-    0 0 120px 40px rgba(255, 210, 80, 0.2);
+    0 0 50px 20px rgba(255, 244, 180, 0.45),
+    0 0 140px 50px rgba(255, 220, 90, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: disc 2.55s ease-out forwards;
+  animation: disc 3.35s ease-out forwards;
 }
 
 .logo {
-  width: 92%;
+  width: 58%;
   height: auto;
-  filter: drop-shadow(0 0 18px rgba(255, 220, 80, 0.85));
+  filter: drop-shadow(0 0 16px rgba(255, 230, 100, 0.7));
 }
+
+.city {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22%;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.2%;
+  padding: 0 2%;
+}
+
+.b {
+  flex: 1;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 7px,
+      rgba(255, 210, 70, 0.22) 7px 8px,
+      transparent 8px 15px
+    ),
+    linear-gradient(180deg, #12151f 0%, #07080c 100%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.b1 { height: 42%; }
+.b2 { height: 68%; }
+.b3 { height: 54%; }
+.b4 { height: 88%; }
+.b5 { height: 46%; }
+.b6 { height: 72%; }
+.b7 { height: 38%; }
+.b8 { height: 96%; }
+.b9 { height: 58%; }
+.b10 { height: 74%; }
+.b11 { height: 50%; }
+.b12 { height: 64%; }
 
 @keyframes sky {
   0% {
     opacity: 0;
   }
-  12% {
+  10% {
     opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes lamp {
+  0%,
+  6% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(1);
   }
   78% {
     opacity: 1;
@@ -82,39 +163,41 @@ body {
 }
 
 @keyframes cone {
-  0% {
+  0%,
+  8% {
     opacity: 0;
-    transform: translateX(-50%) scaleY(0.2);
-    transform-origin: bottom center;
+    transform: rotate(-36deg) scaleY(0.08);
   }
-  18% {
+  26% {
     opacity: 1;
-    transform: translateX(-50%) scaleY(1);
+    transform: rotate(-36deg) scaleY(1);
   }
   78% {
     opacity: 1;
+    transform: rotate(-36deg) scaleY(1);
   }
   100% {
     opacity: 0;
+    transform: rotate(-36deg) scaleY(1);
   }
 }
 
 @keyframes disc {
   0%,
-  16% {
+  24% {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.55);
   }
-  32% {
+  38% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  76% {
+  78% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(1.05);
+    transform: translate(-50%, -50%) scale(1.04);
   }
 }
