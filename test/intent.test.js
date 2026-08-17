@@ -73,3 +73,27 @@ test("before the call infers 10:00 from the 11:00 meeting", () => {
   );
   assert.equal(fromLlm.actions.update[0].time, "10:00");
 });
+
+test("remind in 2 mins wins even if the model refuses", () => {
+  const decision = decideTurn({
+    userText: "remind me to drink water at 12.53AM today please (in 2 mins)",
+    tasks: [],
+    history: [],
+    llmIntent: { action: "chat", title: null, match: null, time: null, day: null, question: null, confidence: "high" },
+    pending: null,
+    now: new Date("2026-08-17T00:51:00"),
+  });
+  assert.equal(decision.chat, undefined);
+  assert.equal(decision.actions.pings.length, 1);
+  assert.match(decision.actions.pings[0].text, /drink water/i);
+});
+
+test("remind action from the model arms a ping", () => {
+  const fromLlm = actionsFromIntent(
+    { action: "remind", title: "drink water", time: "00:53", day: "today", inMinutes: 2, question: null, confidence: "high" },
+    [],
+    "remind me to drink water in 2 mins",
+    new Date("2026-08-17T00:51:00")
+  );
+  assert.equal(fromLlm.actions.pings[0].delayMs, 2 * 60 * 1000);
+});

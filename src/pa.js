@@ -54,6 +54,70 @@ function inferDay(text) {
   return null;
 }
 
+function parseDelay(text) {
+  const raw = String(text || "").toLowerCase();
+  const match = raw.match(/\bin\s+(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b/);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  if (unit.startsWith("hour") || unit.startsWith("hr")) return Math.round(amount * 60 * 60 * 1000);
+  if (unit.startsWith("min")) return Math.round(amount * 60 * 1000);
+  return Math.round(amount * 1000);
+}
+
+function looksLikeLiveRemind(text) {
+  const lower = String(text || "").toLowerCase();
+  if (/\b(add a reminder|add the reminder|put a reminder)\b/.test(lower) && !parseDelay(lower)) return false;
+  return /\b(remind me|ping me|nudge me|alarm me)\b/.test(lower) || Boolean(parseDelay(lower));
+}
+
+function hhmmFromDelay(delayMs, now = new Date()) {
+  const d = new Date(now.getTime() + Number(delayMs || 0));
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function pingAt(ping, now = new Date()) {
+  const delay = Number(ping?.delayMs);
+  if (Number.isFinite(delay) && delay > 0) return now.getTime() + delay;
+  const time = ping?.time || ping?.hhmm;
+  if (!time) return 0;
+  const [hour, minute] = String(time).split(":").map(Number);
+  const stamp = new Date(now);
+  stamp.setSeconds(0, 0);
+  stamp.setHours(hour, minute, 0, 0);
+  if (ping.day === "tomorrow") stamp.setDate(stamp.getDate() + 1);
+  else if (stamp.getTime() < now.getTime() - 15 * 1000) stamp.setDate(stamp.getDate() + 1);
+  return stamp.getTime();
+}
+
+function upsertPing(pings, ping, now = new Date()) {
+  const list = Array.isArray(pings) ? pings.map((item) => ({ ...item })) : [];
+  const text = String(ping?.text || ping?.title || "").trim();
+  if (!text) return list;
+  const at = pingAt(ping, now);
+  if (!at) return list;
+  const kept = list.filter((existing) => {
+    if (existing.fired) return true;
+    const sameText = String(existing.text || "").toLowerCase() === text.toLowerCase();
+    const close = Math.abs(new Date(existing.at).getTime() - at) < 45 * 1000;
+    return !(sameText && close);
+  });
+  kept.push({
+    id: ping.id || `ping-${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+    text,
+    at: new Date(at).toISOString(),
+    fired: false,
+  });
+  return kept.filter((item) => item.fired || new Date(item.at).getTime() > now.getTime() - 60 * 1000).slice(-40);
+}
+
+function upcomingPings(pings, now = new Date()) {
+  return (Array.isArray(pings) ? pings : [])
+    .filter((item) => item && !item.fired && new Date(item.at).getTime() >= now.getTime() - 5000)
+    .sort((a, b) => new Date(a.at) - new Date(b.at));
+}
+
 function reminderTimes(list) {
   const times = (Array.isArray(list) ? list : DEFAULT_REMINDER_TIMES)
     .map(normalizeTime)
@@ -122,12 +186,14 @@ const STOP_WORDS = new Set([
 function cleanTitle(text) {
   return stripLeadingFiller(
     String(text || "")
+      .replace(/\bin\s+\d+(?:\.\d+)?\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b/gi, " ")
       .replace(/\b(tmrw|tmw|tomorrow|tommorow|tommorrow|today|tonight|please|pls)\b/gi, " ")
       .replace(/\b(mrng|morning|afternoon|evening|noon|night)\b/gi, " ")
       .replace(/\b(i have|i've got|i got|i've a|i will|i'll|let me|remind me( to)?|(a |the )?reminders?\s*(to|for)?|add|put|schedule|'s time|time)\b/gi, " ")
       .replace(/\b(a call|calls?)\b/gi, "call")
       .replace(/\b(at|on|for|with)\s+(?=\d)/gi, " ")
       .replace(/\b\d{1,2}(?::|\.)?\d{0,2}\s*(a\.?m\.?|p\.?m\.?)?\b/gi, " ")
+      .replace(/\(\s*\)/g, " ")
       .replace(/\s+/g, " ")
       .replace(/^[.,;:\- ]+|[.,;:\- ]+$/g, "")
       .replace(/^a\s+/i, "")
@@ -480,7 +546,7 @@ function recordFired(fired, day, slots) {
 }
 
 function emptyActions() {
-  return { addTomorrow: [], addToday: [], done: [], remember: [], update: [], remove: [], removeDuplicates: false };
+  return { addTomorrow: [], addToday: [], done: [], remember: [], update: [], remove: [], pings: [], removeDuplicates: false };
 }
 
 function extractPaBlock(text) {
@@ -498,6 +564,7 @@ function extractPaBlock(text) {
         remember: Array.isArray(parsed.remember) ? parsed.remember : [],
         update: Array.isArray(parsed.update) ? parsed.update : [],
         remove: Array.isArray(parsed.remove) ? parsed.remove : [],
+        pings: Array.isArray(parsed.pings) ? parsed.pings : [],
         removeDuplicates: Boolean(parsed.removeDuplicates),
       };
     } catch {
@@ -532,6 +599,7 @@ function hasWork(actions) {
         actions.done?.length ||
         actions.update?.length ||
         actions.remove?.length ||
+        actions.pings?.length ||
         actions.removeDuplicates)
   );
 }
@@ -546,6 +614,25 @@ function interpretUserText(text, now = new Date()) {
   const subject = extractSubject(raw);
 
   if (looksLikeNudge(lower)) return actions;
+
+  if (looksLikeLiveRemind(raw)) {
+    const delay = parseDelay(raw);
+    if (delay || time) {
+      const title = (subject && isLikelyTask(subject) ? subject : cleanTitle(raw)) || subject;
+      if (title && isLikelyTask(title)) {
+        actions.pings.push({
+          text: title,
+          delayMs: delay || null,
+          time: time || (delay ? hhmmFromDelay(delay, now) : null),
+          day: day || "today",
+        });
+        const item = { text: title, time: time || (delay ? hhmmFromDelay(delay, now) : null) };
+        if (day === "tomorrow" && !delay) actions.addTomorrow.push(item);
+        else actions.addToday.push(item);
+        return actions;
+      }
+    }
+  }
 
   if (
     /\bduplicates?\b/.test(lower) ||
@@ -629,6 +716,7 @@ function mergeActions(first, second) {
     remember: [...a.remember, ...b.remember],
     update: [...a.update, ...b.update],
     remove: [...a.remove, ...b.remove],
+    pings: [...(a.pings || []), ...(b.pings || [])],
     removeDuplicates: false,
   };
 }
@@ -636,6 +724,7 @@ function mergeActions(first, second) {
 function applyPaActions(state, actions, now = new Date()) {
   let tasks = tidyTasks(Array.isArray(state.tasks) ? state.tasks : []);
   let facts = Array.isArray(state.facts) ? state.facts : [];
+  let pings = Array.isArray(state.pings) ? state.pings.map((item) => ({ ...item })) : [];
   if (!actions?.removeDuplicates) {
     tasks = addTasks(tasks, actions.addToday, dateKey(now), now);
     tasks = addTasks(tasks, actions.addTomorrow, tomorrowKey(now), now);
@@ -644,12 +733,15 @@ function applyPaActions(state, actions, now = new Date()) {
   tasks = markDone(tasks, actions.done);
   tasks = removeTasks(tasks, actions.remove);
   tasks = tidyTasks(tasks);
+  for (const ping of actions.pings || []) {
+    pings = upsertPing(pings, ping, now);
+  }
   for (const fact of actions.remember || []) {
     const text = String(fact || "").trim();
     if (text && !isJunkTask(text) && !facts.includes(text)) facts.push(text);
   }
   facts = facts.slice(-40);
-  return { tasks, facts };
+  return { tasks, facts, pings };
 }
 
 function openLines(tasks) {
@@ -686,7 +778,17 @@ function describeChange(before, after, userText, actions = emptyActions()) {
       lines.push(`Time update succeeded: ${formatTaskLine(match)}.`);
     }
   }
-  if (actions.removeDuplicates || /\b(2|two|duplicates?)\b/i.test(userText)) {
+  if ((actions.pings || []).length) {
+    const bits = actions.pings.map((ping) => {
+      if (ping.delayMs) {
+        const mins = Math.max(1, Math.round(Number(ping.delayMs) / 60000));
+        return `${ping.text} in ${mins} min`;
+      }
+      return `${ping.text} at ${ping.time || "the set time"}`;
+    });
+    lines.push(`Live reminder armed: ${bits.join("; ")}. Batman WILL ping with the red beam.`);
+  }
+  if (actions.removeDuplicates || /\bduplicates?\b/i.test(userText) || /\b(2|two)\s+calls?\b/i.test(userText)) {
     const calls = (after || []).filter((item) => !item.done && isCallish(item.text));
     const parties = {};
     for (const item of calls) {
@@ -705,6 +807,7 @@ function paInstructions() {
     "The to-do list engine already ran BEFORE you speak. You do not mutate the list.",
     "Read GROUND TRUTH. Only describe what it says. Never say 'updating', 'I will add', or 'done' unless GROUND TRUTH says the change succeeded.",
     "If GROUND TRUTH says FAILED, admit it is still there. Do not pretend.",
+    "You CAN set live reminders (in 2 mins, at 12:53am). If GROUND TRUTH says a live reminder is armed, confirm it. Never say you cannot set a reminder.",
     "Keep answers short. No machine JSON.",
   ].join(" ");
 }
@@ -716,6 +819,10 @@ module.exports = {
   normalizeTime,
   parseClock,
   inferDay,
+  parseDelay,
+  looksLikeLiveRemind,
+  pingAt,
+  upcomingPings,
   reminderTimes,
   formatTaskLine,
   newTask,
@@ -740,6 +847,7 @@ module.exports = {
   findTask,
   hourBefore,
   emptyActions,
+  cleanTitle,
   isPrepTask,
   isCallish,
   paInstructions,

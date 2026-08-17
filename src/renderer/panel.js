@@ -11,6 +11,7 @@ const keyStatus = document.getElementById("key-status");
 const briefingLine = document.getElementById("briefing-line");
 const tasksToday = document.getElementById("tasks-today");
 const tasksTomorrow = document.getElementById("tasks-tomorrow");
+const livePings = document.getElementById("live-pings");
 
 const DEFAULTS = {
   gemini: "gemini-3.7-flash",
@@ -64,6 +65,27 @@ function renderTaskList(node, items) {
   });
 }
 
+function renderPings(node, items) {
+  if (!node) return;
+  node.innerHTML = "";
+  if (!items || !items.length) {
+    node.innerHTML = '<p class="hint">None armed. Say “remind me in 2 mins” in Ask.</p>';
+    return;
+  }
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "task-row";
+    const text = document.createElement("span");
+    const when = item.at ? new Date(item.at) : null;
+    const clock = when && !Number.isNaN(when.getTime())
+      ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "";
+    text.textContent = clock ? `${clock} · ${item.text}` : item.text;
+    row.append(text);
+    node.appendChild(row);
+  });
+}
+
 function applyState(state) {
   if (!state) return;
   status.textContent = state.asleep ? `Sleeping · ${state.remaining} left` : "On patrol";
@@ -80,11 +102,12 @@ function applyState(state) {
   if (briefingLine) {
     const open = (state.tasksToday || []).filter((item) => !item.done).length;
     briefingLine.textContent = open
-      ? `${open} open today. I'll ping you four times. Sleep is fine; full Quit pauses reminders.`
-      : "No open tasks today. Tonight, tell me tomorrow's list in Ask.";
+      ? `${open} open today. Four daily patrols plus any live reminders. Sleep is fine; Quit pauses them.`
+      : "No open tasks today. You can still say “remind me in 2 mins” in Ask.";
   }
   renderTaskList(tasksToday, state.tasksToday);
   renderTaskList(tasksTomorrow, state.tasksTomorrow);
+  renderPings(livePings, state.pings);
   if (!paintedHistory && state.history && state.history.length) {
     paintedHistory = true;
     log.innerHTML = "";

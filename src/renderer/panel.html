@@ -29,13 +29,15 @@
           </div>
         </div>
         <form id="ask-form">
-          <input id="prompt" type="text" placeholder="e.g. call with Demi tmrw 11am" autocomplete="off" />
+          <input id="prompt" type="text" placeholder="e.g. remind me to drink water in 2 mins" autocomplete="off" />
           <button type="submit">Send</button>
         </form>
       </section>
 
       <section id="tasks" class="page">
         <p class="hint" id="briefing-line">No tasks yet. Tell me in Ask — no need to type them here.</p>
+        <h3>Live reminders</h3>
+        <div id="live-pings" class="task-list"></div>
         <h3>Today</h3>
         <div id="tasks-today" class="task-list"></div>
         <h3>Tomorrow</h3>
@@ -90,7 +92,8 @@
           </div>
         </label>
         <p class="hint">
-          Keep Batman running (or Sleep, not full Quit) so the four pings can fire.
+          Keep Batman running (Sleep is fine; full Quit stops reminders). Live pings like “in 2 mins”
+          fire a notification and the red eye-beam.
         </p>
         <p id="key-status" class="hint"></p>
         <button id="save" type="button">Save</button>

@@ -4,6 +4,7 @@ const {
   emptyActions,
   parseClock,
   inferDay,
+  parseDelay,
   normalizeTime,
   formatTaskLine,
   rankedMatches,
@@ -12,15 +13,18 @@ const {
   isPrepTask,
   isCallish,
   captureFromUserText,
+  cleanTitle,
 } = require("./pa");
 
 const INTENT_PROMPT = [
   "You are the PA brain for a desktop Batman. You do not change the list yourself.",
   "Read the open tasks and the user message. Understand messy spelling and shorthand.",
   "Reply with ONLY JSON, no other text:",
-  '{"action":"add|update|remove|complete|dedupe|ask|chat","title":null,"match":null,"time":null,"day":null,"question":null,"confidence":"high|low"}',
+  '{"action":"add|update|remove|complete|dedupe|remind|ask|chat","title":null,"match":null,"time":null,"day":null,"inMinutes":null,"question":null,"confidence":"high|low"}',
+  "action=remind when they want a live ping: 'in 2 mins', 'in 10 minutes', 'remind me at 12:53am'. Set title, time as HH:MM if given, inMinutes if relative.",
+  "Batman CAN fire live reminders with a red eye-beam. Never refuse a timed remind.",
   "action=ask if two tasks could match, a time/day is missing when it matters, or you are not sure. Put the question in question.",
-  "time must be 24-hour HH:MM. '10', '10 tmrw', '10am' → 10:00. '2pm' → 14:00.",
+  "time must be 24-hour HH:MM. '10', '10 tmrw', '10am' → 10:00. '2pm' → 14:00. '12.53AM' → 00:53.",
   "If they say before the call and a call exists, use one hour before that call unless they gave a time.",
   "Do not add a second copy of a task that already exists; update it.",
   "chat = conversation only, no list change.",
@@ -34,13 +38,15 @@ function parseIntentReply(raw) {
   try {
     const parsed = JSON.parse(text.slice(start, end + 1));
     const action = String(parsed.action || "chat").toLowerCase();
-    const allowed = ["add", "update", "remove", "complete", "dedupe", "ask", "chat"];
+    const allowed = ["add", "update", "remove", "complete", "dedupe", "remind", "ask", "chat"];
+    const inMinutes = Number(parsed.inMinutes);
     return {
       action: allowed.includes(action) ? action : "chat",
       title: parsed.title ? String(parsed.title).trim() : null,
       match: parsed.match ? String(parsed.match).trim() : parsed.title ? String(parsed.title).trim() : null,
       time: normalizeTime(parsed.time) || parseClock(parsed.time) || parseClock(text) || null,
       day: parsed.day === "today" || parsed.day === "tomorrow" ? parsed.day : inferDay(String(parsed.day || "")),
+      inMinutes: Number.isFinite(inMinutes) && inMinutes > 0 ? inMinutes : null,
       question: parsed.question ? String(parsed.question).trim() : null,
       confidence: String(parsed.confidence || "").toLowerCase() === "high" ? "high" : "low",
     };
@@ -127,6 +133,21 @@ function actionsFromIntent(intent, tasks, userText, now) {
     if (basis) time = hourBefore(basis);
   }
 
+  if (intent.action === "remind") {
+    const delayMs =
+      intent.inMinutes != null ? Math.round(Number(intent.inMinutes) * 60 * 1000) : parseDelay(userText);
+    const title = intent.title || intent.match || cleanTitle(userText);
+    if (!title) return { question: "What should I remind you about, and when?", pending: null };
+    if (!delayMs && !time) {
+      return { question: "When should I ping you? Say in 2 mins, or a clock time.", pending: null };
+    }
+    actions.pings.push({ text: title, delayMs: delayMs || null, time: time || null, day: day || "today" });
+    const item = { text: title, time: time || null };
+    if (day === "tomorrow" && !delayMs) actions.addTomorrow.push(item);
+    else actions.addToday.push(item);
+    return { actions };
+  }
+
   const needle = intent.match || intent.title || userText;
   const rows = rankedMatches(tasks, needle);
 
@@ -195,7 +216,12 @@ function decideTurn({ userText, tasks, history, llmIntent, pending, now }) {
   if (llmIntent) {
     const fromLlm = actionsFromIntent(llmIntent, tasks, userText, now);
     if (fromLlm.question) return fromLlm;
-    if (fromLlm.actions && !fromLlm.chat) return fromLlm;
+    if (fromLlm.actions && !fromLlm.chat) {
+      if (local.pings?.length) {
+        fromLlm.actions.pings = [...(fromLlm.actions.pings || []), ...local.pings];
+      }
+      return fromLlm;
+    }
     if (fromLlm.chat && !hasLocalWork(local)) return { actions: emptyActions(), chat: true };
   }
 
@@ -224,11 +250,13 @@ function hasLocalWork(actions) {
         actions.done?.length ||
         actions.update?.length ||
         actions.remove?.length ||
+        actions.pings?.length ||
         actions.removeDuplicates)
   );
 }
 
 function localIsCertain(local, tasks) {
+  if (local?.pings?.length) return true;
   if (!hasLocalWork(local)) return false;
   const needle = local.update[0]?.match || local.remove[0] || local.done[0];
   if (!needle || isVague(needle)) return false;
@@ -252,7 +280,11 @@ function spokenResult(decision, ground) {
 function summarizeGround(ground) {
   const lines = String(ground || "")
     .split("\n")
-    .filter((line) => /^(Removed|Added|Now on the list|Time update succeeded|Delete succeeded|Duplicates collapsed)/i.test(line));
+    .filter((line) =>
+      /^(Removed|Added|Now on the list|Time update succeeded|Delete succeeded|Duplicates collapsed|Live reminder armed)/i.test(
+        line
+      )
+    );
   return lines.join(" ") || ground;
 }
 

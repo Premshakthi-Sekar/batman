@@ -16,6 +16,8 @@ const {
   captureFromUserText,
   parseClock,
   updateTasks,
+  parseDelay,
+  describeChange,
 } = require("../src/pa");
 
 test("tomorrowKey is the next calendar day", () => {
@@ -252,4 +254,37 @@ test("change leads to 10 tmrw updates that task only", () => {
   assert.equal(state.tasks.find((item) => /leads/i.test(item.text)).time, "10:00");
   state = applyPaActions(state, captureFromUserText("thanks but the time must be 10 am"), now);
   assert.equal(state.tasks.find((item) => /leads/i.test(item.text)).time, "10:00");
+});
+
+test("parseClock understands 12.53AM", () => {
+  assert.equal(parseClock("12.53AM"), "00:53");
+  assert.equal(parseClock("at 12.53 AM today"), "00:53");
+});
+
+test("parseDelay reads in 2 mins", () => {
+  assert.equal(parseDelay("in 2 mins"), 2 * 60 * 1000);
+  assert.equal(parseDelay("in 10 minutes"), 10 * 60 * 1000);
+});
+
+test("live remind in 2 mins arms a ping and does not refuse", () => {
+  const now = new Date("2026-08-17T00:51:00");
+  const phrase = "remind me to drink water at 12.53AM today please (in 2 mins)";
+  const actions = captureFromUserText(phrase, now);
+  assert.equal(actions.pings.length, 1);
+  assert.match(actions.pings[0].text, /drink water/i);
+  assert.equal(actions.pings[0].delayMs, 2 * 60 * 1000);
+  assert.equal(actions.addToday[0].time, "00:53");
+  const next = applyPaActions({ tasks: [], facts: [], pings: [] }, actions, now);
+  assert.equal(next.pings.length, 1);
+  const at = new Date(next.pings[0].at).getTime();
+  assert.ok(Math.abs(at - (now.getTime() + 2 * 60 * 1000)) < 1500);
+  const ground = describeChange([], next.tasks, phrase, actions);
+  assert.match(ground, /Live reminder armed/i);
+  assert.match(actions.pings[0].text, /^drink water$/i);
+});
+
+test("add a reminder tmrw is still a list item, not a live ping", () => {
+  const actions = captureFromUserText("add a reminder tmrw to run a fresh leads for demi before call");
+  assert.equal(actions.pings.length, 0);
+  assert.equal(actions.addTomorrow.length, 1);
 });

@@ -24,6 +24,7 @@ const {
   tasksForDate,
   tidyTasks,
   describeChange,
+  upcomingPings,
 } = require("./pa");
 const { INTENT_PROMPT, parseIntentReply, listSnapshot, decideTurn, spokenResult } = require("./intent");
 const { BEAM_MS, beamLayout } = require("./beam");
@@ -69,6 +70,7 @@ let dragging = false;
 let hovering = false;
 let dragGrab = { x: 0, y: 0 };
 let reminderTimer;
+let pingTimers = new Map();
 
 const wander = {
   x: 80,
@@ -277,6 +279,7 @@ function publicState() {
     tasksTomorrow: tasksForDate(tasks, tomorrowKey(now)).filter((item) => !item.done),
     reminderTimes: reminderTimes(store.get("reminderTimes", DEFAULT_REMINDER_TIMES)),
     facts: store.get("facts", []),
+    pings: upcomingPings(store.get("pings", [])),
     history: (store.get("history", []) || []).slice(-16),
     briefing: briefing(tasks, store.get("facts", []), now),
   };
@@ -304,8 +307,16 @@ function closeBeamWindow() {
   sendPetState();
 }
 
-function fireReminderBeam() {
-  if (!petWindow || petWindow.isDestroyed() || wander.sleeping) return;
+function fireReminderBeam(opts = {}) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const force = Boolean(opts.force);
+  if (wander.sleeping && !force) return;
+  const restoreSleep = force && wander.sleeping;
+  if (restoreSleep) {
+    wander.sleeping = false;
+    paused = true;
+    if (petWindow && !petWindow.isDestroyed()) petWindow.showInactive();
+  }
   closeBeamWindow();
   const display = screen.getDisplayNearestPoint({
     x: Math.round(wander.x + PET_SIZE / 2),
@@ -348,7 +359,15 @@ function fireReminderBeam() {
     wander.beaming = false;
     sendPetState();
   });
-  setTimeout(() => closeBeamWindow(), BEAM_MS);
+  setTimeout(() => {
+    closeBeamWindow();
+    if (restoreSleep && store && isAsleep(store.get("wakeAt", 0))) {
+      wander.sleeping = true;
+      paused = true;
+      if (petWindow && !petWindow.isDestroyed()) petWindow.hide();
+      sendPetState();
+    }
+  }, BEAM_MS);
 }
 
 function tickReminders() {
@@ -365,6 +384,40 @@ function tickReminders() {
     notify("Batman · daily patrol", body);
   }
   store.set("reminderFired", recordFired(fired, dateKey(now), due));
+}
+
+function clearPingTimers() {
+  for (const timer of pingTimers.values()) clearTimeout(timer);
+  pingTimers.clear();
+}
+
+function deliverPing(id) {
+  if (!store) return;
+  const pings = (store.get("pings", []) || []).map((item) => ({ ...item }));
+  const ping = pings.find((item) => item.id === id);
+  if (!ping || ping.fired) return;
+  ping.fired = true;
+  store.set("pings", pings);
+  pingTimers.delete(id);
+  fireReminderBeam({ force: true });
+  notify("Batman · reminder", ping.text);
+}
+
+function armPings() {
+  if (!store) return;
+  clearPingTimers();
+  const now = Date.now();
+  for (const ping of store.get("pings", []) || []) {
+    if (!ping || ping.fired) continue;
+    const at = new Date(ping.at).getTime();
+    if (!Number.isFinite(at)) continue;
+    const delay = Math.max(0, at - now);
+    if (delay > 36 * 60 * 60 * 1000) continue;
+    pingTimers.set(
+      ping.id,
+      setTimeout(() => deliverPing(ping.id), delay)
+    );
+  }
 }
 
 function startReminderLoop() {
@@ -630,10 +683,25 @@ function registerIpc() {
     }
 
     store.set("pendingClarify", null);
-    const fromChat = decision.actions || { addTomorrow: [], addToday: [], done: [], remember: [], update: [], remove: [], removeDuplicates: false };
-    const next = applyPaActions({ tasks: before, facts: store.get("facts", []) }, fromChat, now);
+    const fromChat = decision.actions || {
+      addTomorrow: [],
+      addToday: [],
+      done: [],
+      remember: [],
+      update: [],
+      remove: [],
+      pings: [],
+      removeDuplicates: false,
+    };
+    const next = applyPaActions(
+      { tasks: before, facts: store.get("facts", []), pings: store.get("pings", []) },
+      fromChat,
+      now
+    );
     store.set("tasks", next.tasks);
     store.set("facts", next.facts);
+    store.set("pings", next.pings || []);
+    armPings();
     const ground = describeChange(before, next.tasks, userText, fromChat);
     const fallback = spokenResult(decision, ground);
     let visible = fallback;
@@ -696,6 +764,7 @@ app.whenReady().then(() => {
   if (!store.get("history")) store.set("history", []);
   if (!store.get("tasks")) store.set("tasks", []);
   if (!store.get("facts")) store.set("facts", []);
+  if (!store.get("pings")) store.set("pings", []);
   if (!store.get("reminderTimes")) store.set("reminderTimes", DEFAULT_REMINDER_TIMES);
   if (!store.get("reminderFired")) store.set("reminderFired", {});
 
@@ -720,6 +789,7 @@ app.whenReady().then(() => {
   }
   startWander();
   startReminderLoop();
+  armPings();
 
   screen.on("display-metrics-changed", () => applyPetPosition());
 });
@@ -734,4 +804,5 @@ app.on("before-quit", () => {
   closeBeamWindow();
   if (sleepTimer) clearTimeout(sleepTimer);
   if (reminderTimer) clearInterval(reminderTimer);
+  clearPingTimers();
 });
