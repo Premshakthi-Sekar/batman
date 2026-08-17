@@ -24,6 +24,7 @@ const {
   mergeActions,
   applyPaActions,
   tasksForDate,
+  tidyTasks,
 } = require("./pa");
 
 const PET_SIZE = 96;
@@ -250,7 +251,8 @@ function publicState() {
   const asleep = isAsleep(wakeAt);
   const provider = currentProvider();
   const now = new Date();
-  const tasks = store.get("tasks", []);
+  const tasks = tidyTasks(store.get("tasks", []));
+  store.set("tasks", tasks);
   return {
     asleep,
     remaining: formatRemaining(wakeAt),

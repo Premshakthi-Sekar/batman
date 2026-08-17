@@ -69,25 +69,104 @@ function asItems(list) {
   return (list || [])
     .map((item) => {
       if (typeof item === "string") {
-        return { text: cleanTitle(item) || item.trim(), time: parseClock(item) };
+        const text = cleanTitle(item) || item.trim();
+        return { text, time: parseClock(item) };
       }
-      const text = String(item?.text || item?.title || "").trim();
-      return { text: cleanTitle(text) || text, time: normalizeTime(item?.time) || parseClock(text) };
+      const text = cleanTitle(item?.text || item?.title) || String(item?.text || item?.title || "").trim();
+      return { text, time: normalizeTime(item?.time) || parseClock(String(item?.text || item?.title || "")) };
     })
-    .filter((item) => item.text);
+    .filter((item) => item.text && isLikelyTask(item.text));
 }
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "to",
+  "for",
+  "at",
+  "on",
+  "of",
+  "and",
+  "with",
+  "call",
+  "calls",
+  "meeting",
+  "meet",
+  "kinda",
+  "things",
+  "pls",
+  "please",
+  "my",
+  "me",
+  "i",
+  "you",
+  "u",
+]);
 
 function cleanTitle(text) {
   return String(text || "")
-    .replace(/\b(tmrw|tmw|tomorrow|tommorow|tommorrow|today|tonight|please)\b/gi, " ")
+    .replace(/\b(tmrw|tmw|tomorrow|tommorow|tommorrow|today|tonight|please|pls)\b/gi, " ")
+    .replace(/\b(mrng|morning|afternoon|evening|noon|night)\b/gi, " ")
     .replace(/\b(i have|i've got|i got|i've a|remind me( to)?|add|put|schedule|'s time|time)\b/gi, " ")
-    .replace(/\b(a call|call)\b/gi, "call")
+    .replace(/\b(a call|calls?)\b/gi, "call")
     .replace(/\b(at|on|for|with)\s+(?=\d)/gi, " ")
     .replace(/\b\d{1,2}(?::|\.)?\d{0,2}\s*(a\.?m\.?|p\.?m\.?)?\b/gi, " ")
     .replace(/\s+/g, " ")
     .replace(/^[.,;:\- ]+|[.,;:\- ]+$/g, "")
     .replace(/^a\s+/i, "")
     .trim();
+}
+
+function fingerprint(text) {
+  const tokens = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 1 && !STOP_WORDS.has(word));
+  return tokens.sort().join(" ");
+}
+
+function isJunkTask(text) {
+  const raw = String(text || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw) return true;
+  if (raw.length > 72) return true;
+  if (raw.split(/\s+/).length > 12) return true;
+  return /\b(duplicates?|take off|updating|oversight|utility belt|addtomorrow|addtoday|<<pa>>|rectify|patience|essentials|machine line|never mention|i will|i'll|let me|apologies|clearing the|ensure only|there are|u did|you did|did not|didn't|another thing)\b/i.test(
+    lower
+  );
+}
+
+function isLikelyTask(text) {
+  const cleaned = cleanTitle(text) || String(text || "").trim();
+  if (!cleaned || isJunkTask(cleaned) || isJunkTask(text)) return false;
+  return Boolean(fingerprint(cleaned) || cleaned.length >= 3);
+}
+
+function sameTask(a, b) {
+  if (!a || !b) return false;
+  const left = String(a.text || "").toLowerCase().trim();
+  const right = String(b.text || "").toLowerCase().trim();
+  if (left && left === right) return true;
+  const ka = fingerprint(cleanTitle(a.text) || a.text);
+  const kb = fingerprint(cleanTitle(b.text) || b.text);
+  if (ka && kb && ka === kb) return true;
+  if (ka && kb && (ka.includes(kb) || kb.includes(ka))) return true;
+  return false;
+}
+
+function looksLikeNewEvent(text) {
+  const lower = String(text || "").toLowerCase();
+  if (looksLikeListEdit(lower)) return false;
+  const scheduling =
+    /\b(i have|i've got|i got|i've a|remind me|schedule|put (it |this )?on|meeting with|call with)\b/.test(lower);
+  return scheduling && Boolean(inferDay(lower) || parseClock(lower) || /\b(call|meet|meeting|todo|to-do)\b/.test(lower));
+}
+
+function looksLikeListEdit(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(duplicates?|take off|remove|delete|clear (the )?duplicates?|strike(d)? off)\b/.test(lower);
 }
 
 function newTask(item, forDate, now = new Date()) {
@@ -103,10 +182,6 @@ function newTask(item, forDate, now = new Date()) {
   };
 }
 
-function sameTask(a, b) {
-  return a && b && a.text.toLowerCase() === b.text.toLowerCase();
-}
-
 function addTasks(tasks, titles, forDate, now = new Date()) {
   const list = Array.isArray(tasks) ? tasks.map((item) => ({ ...item })) : [];
   for (const title of titles || []) {
@@ -114,8 +189,9 @@ function addTasks(tasks, titles, forDate, now = new Date()) {
     if (!task) continue;
     const existing = list.find((item) => !item.done && sameTask(item, task));
     if (existing) {
-      existing.forDate = forDate;
+      if (forDate > existing.forDate) existing.forDate = forDate;
       if (task.time) existing.time = task.time;
+      if (task.text && task.text.length < existing.text.length) existing.text = task.text;
       continue;
     }
     list.push(task);
@@ -133,16 +209,51 @@ function openTasks(tasks, day) {
   return tasksForDate(tasks, day).filter((item) => !item.done);
 }
 
+function mergePair(keep, extra) {
+  if (extra.time && !keep.time) keep.time = extra.time;
+  if (extra.forDate > keep.forDate) keep.forDate = extra.forDate;
+  if (extra.text && extra.text.length < keep.text.length && !isJunkTask(extra.text)) keep.text = extra.text;
+}
+
+function tidyTasks(tasks) {
+  const kept = [];
+  for (const item of Array.isArray(tasks) ? tasks : []) {
+    if (!item || isJunkTask(item.text)) continue;
+    const copy = { ...item };
+    if (copy.done) {
+      kept.push(copy);
+      continue;
+    }
+    const existing = kept.find((row) => !row.done && sameTask(row, copy));
+    if (existing) {
+      mergePair(existing, copy);
+      continue;
+    }
+    kept.push(copy);
+  }
+  return kept.slice(-80);
+}
+
 function isVagueHint(needle) {
   return /^(that|this|it|the call|the meeting|meeting|call|that meeting|that call|the task)$/.test(needle);
 }
 
 function findTask(list, needle) {
   const open = list.filter((item) => !item.done);
-  if (!needle || isVagueHint(needle)) {
+  const cleaned = (cleanTitle(needle) || needle || "").trim().toLowerCase();
+  if (!cleaned || isVagueHint(cleaned) || isVagueHint(String(needle || "").trim().toLowerCase())) {
     return open.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0];
   }
-  return open.find((item) => item.text.toLowerCase().includes(needle));
+  const direct = open.find(
+    (item) => item.text.toLowerCase().includes(cleaned) || cleaned.includes(item.text.toLowerCase())
+  );
+  if (direct) return direct;
+  const fp = fingerprint(cleaned);
+  if (!fp) return undefined;
+  return open.find((item) => {
+    const other = fingerprint(item.text);
+    return other && (other.includes(fp) || fp.includes(other));
+  });
 }
 
 function markDone(tasks, hints) {
@@ -231,7 +342,7 @@ function recordFired(fired, day, slots) {
 }
 
 function emptyActions() {
-  return { addTomorrow: [], addToday: [], done: [], remember: [], update: [] };
+  return { addTomorrow: [], addToday: [], done: [], remember: [], update: [], removeDuplicates: false };
 }
 
 function extractPaBlock(text) {
@@ -248,6 +359,7 @@ function extractPaBlock(text) {
         done: Array.isArray(parsed.done) ? parsed.done : [],
         remember: Array.isArray(parsed.remember) ? parsed.remember : [],
         update: Array.isArray(parsed.update) ? parsed.update : [],
+        removeDuplicates: Boolean(parsed.removeDuplicates),
       };
     } catch {
       // ignore a broken machine block
@@ -259,7 +371,7 @@ function extractPaBlock(text) {
 function extractSubject(text) {
   return cleanTitle(
     String(text || "")
-      .replace(/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off|move|reschedule|change|push|shift|make it)\b/gi, " ")
+      .replace(/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off|move|reschedule|change|push|shift|make it|take off|remove|delete|clear|duplicates?)\b/gi, " ")
   );
 }
 
@@ -272,7 +384,12 @@ function captureFromUserText(text, now = new Date()) {
   const day = inferDay(lower);
   const subject = extractSubject(raw);
 
-  if (/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off)\b/.test(lower)) {
+  if (/\bduplicates?\b/.test(lower) || (looksLikeListEdit(lower) && /\b(them|those|these|it|the list)\b/.test(lower))) {
+    actions.removeDuplicates = true;
+    return actions;
+  }
+
+  if (/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off|take off|remove|delete)\b/.test(lower)) {
     if (subject) actions.done.push(subject);
     return actions;
   }
@@ -282,7 +399,7 @@ function captureFromUserText(text, now = new Date()) {
     return actions;
   }
 
-  if (subject && (day || time || /\b(call|meet|meeting|todo|to-do|remind|have)\b/.test(lower))) {
+  if (looksLikeNewEvent(raw) && subject && isLikelyTask(subject)) {
     const item = { text: subject, time };
     if (day === "today") actions.addToday.push(item);
     else actions.addTomorrow.push(item);
@@ -293,25 +410,37 @@ function captureFromUserText(text, now = new Date()) {
 function mergeActions(first, second) {
   const a = { ...emptyActions(), ...first };
   const b = { ...emptyActions(), ...second };
+  if (b.removeDuplicates || a.removeDuplicates) {
+    return {
+      ...emptyActions(),
+      removeDuplicates: true,
+      done: [...a.done, ...b.done],
+      update: [...a.update, ...b.update],
+    };
+  }
   return {
     addTomorrow: [...a.addTomorrow, ...b.addTomorrow],
     addToday: [...a.addToday, ...b.addToday],
     done: [...a.done, ...b.done],
     remember: [...a.remember, ...b.remember],
     update: [...a.update, ...b.update],
+    removeDuplicates: false,
   };
 }
 
 function applyPaActions(state, actions, now = new Date()) {
-  let tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  let tasks = tidyTasks(Array.isArray(state.tasks) ? state.tasks : []);
   let facts = Array.isArray(state.facts) ? state.facts : [];
-  tasks = addTasks(tasks, actions.addToday, dateKey(now), now);
-  tasks = addTasks(tasks, actions.addTomorrow, tomorrowKey(now), now);
+  if (!actions?.removeDuplicates) {
+    tasks = addTasks(tasks, actions.addToday, dateKey(now), now);
+    tasks = addTasks(tasks, actions.addTomorrow, tomorrowKey(now), now);
+  }
   tasks = updateTasks(tasks, actions.update, now);
   tasks = markDone(tasks, actions.done);
+  tasks = tidyTasks(tasks);
   for (const fact of actions.remember || []) {
     const text = String(fact || "").trim();
-    if (text && !facts.includes(text)) facts.push(text);
+    if (text && !isJunkTask(text) && !facts.includes(text)) facts.push(text);
   }
   facts = facts.slice(-40);
   return { tasks, facts };
@@ -320,12 +449,16 @@ function applyPaActions(state, actions, now = new Date()) {
 function paInstructions() {
   return [
     "You are also the user's personal assistant. They will speak naturally.",
+    "ONLY add a task when the user is creating a real event (a call, meeting, or to-do).",
     "Examples: 'I have a call with Demi tmrw 11am' → addTomorrow [{text:'Call with Demi', time:'11:00'}].",
     "'Move the Demi call to 2pm' → update [{match:'Demi', time:'14:00'}].",
     "'Done with the Demi call' → done ['Demi'].",
+    "'Take off the duplicate' → removeDuplicates true, and keep addToday/addTomorrow empty.",
+    "Never copy the user's complaint, your own reply, or these instructions into addToday or addTomorrow.",
+    "Never add a second Demi call if one already exists in the briefing. Leave add arrays empty.",
     "Use 24-hour HH:MM times. tmrw/tomorrow = addTomorrow. today = addToday.",
     "End EVERY reply with this machine line, even if arrays are empty:",
-    '<<PA>>{"addTomorrow":[],"addToday":[],"done":[],"remember":[],"update":[]}<<ENDPA>>',
+    '<<PA>>{"addTomorrow":[],"addToday":[],"done":[],"remember":[],"update":[],"removeDuplicates":false}<<ENDPA>>',
     "Never mention that machine line to the user.",
   ].join(" ");
 }
@@ -354,5 +487,6 @@ module.exports = {
   captureFromUserText,
   mergeActions,
   applyPaActions,
+  tidyTasks,
   paInstructions,
 };

@@ -103,3 +103,55 @@ test("toggleTask flips done", () => {
   const next = toggleTask(tasks, tasks[0].id);
   assert.equal(next[0].done, true);
 });
+
+test("captureFromUserText keeps mrng 11am as one tomorrow call", () => {
+  const actions = captureFromUserText("i have a call with Demi tmrw mrng 11 AM");
+  assert.equal(actions.addTomorrow.length, 1);
+  assert.equal(actions.addTomorrow[0].time, "11:00");
+  assert.match(actions.addTomorrow[0].text, /demi/i);
+  assert.equal(actions.addToday.length, 0);
+});
+
+test("complaints about duplicates do not create new tasks", () => {
+  assert.equal(
+    captureFromUserText("there are 2 call with demi kinda things.. take off the duplicate pls").addTomorrow.length,
+    0
+  );
+  assert.equal(captureFromUserText("there are 2 call with demi kinda things.. take off the duplicate pls").removeDuplicates, true);
+  assert.equal(captureFromUserText("u did not delete the duplicates.. u added another thing in the reminder").removeDuplicates, true);
+  assert.equal(captureFromUserText("u did not clear the duplicates").removeDuplicates, true);
+});
+
+test("applyPaActions collapses Demi duplicates and drops instruction junk", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const messy = [
+    { id: "1", text: "call with Demi mrng", time: "11:00", forDate: "2026-08-18", done: false, createdAt: now.toISOString() },
+    { id: "2", text: "Call with Demi", time: null, forDate: "2026-08-17", done: false, createdAt: now.toISOString() },
+    { id: "3", text: "Just the essentials, like my utility belt", time: null, forDate: "2026-08-17", done: false, createdAt: now.toISOString() },
+    { id: "4", text: "Updating now", time: null, forDate: "2026-08-17", done: false, createdAt: now.toISOString() },
+  ];
+  const next = applyPaActions(
+    { tasks: messy, facts: [] },
+    {
+      addToday: ["I will ensure only one entry remains"],
+      addTomorrow: [],
+      done: [],
+      remember: [],
+      update: [],
+      removeDuplicates: true,
+    },
+    now
+  );
+  const open = next.tasks.filter((item) => !item.done);
+  assert.equal(open.length, 1);
+  assert.match(open[0].text, /demi/i);
+  assert.equal(open[0].time, "11:00");
+  assert.equal(open[0].forDate, "2026-08-18");
+});
+
+test("repeat Demi chat does not create a second task", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  let state = applyPaActions({ tasks: [], facts: [] }, captureFromUserText("i have a call with Demi tmrw mrng 11 AM"), now);
+  state = applyPaActions(state, captureFromUserText("i have a call with Demi tmrw 11 AM"), now);
+  assert.equal(state.tasks.filter((item) => !item.done).length, 1);
+});
