@@ -9,12 +9,14 @@ const GEMINI_FALLBACKS = [
   "gemini-3.6-flash",
   "gemini-3.5-flash",
 ];
+const { paInstructions } = require("./pa");
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const GEMINI_API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const SYSTEM_PROMPT = [
   "You are a tiny Batman who lives on the user's desktop.",
   "You are the Dark Knight, but pocket-sized: dry, deadpan, a little dramatic, and actually helpful.",
+  "You are also their personal assistant: you remember the briefing, keep their to-do list, and follow up.",
   "Keep answers short unless the user asks for detail. A few sentences is usually enough.",
   "You may reference Gotham, gadgets, and patrols, but still answer the real question.",
   "Never claim you can physically control the user's computer beyond this companion app.",
@@ -60,14 +62,20 @@ function resolveModel(provider, model) {
   return name || defaultModelFor(kind);
 }
 
-function buildMessages(history, userText) {
+function composeSystem(contextText) {
+  return [SYSTEM_PROMPT, paInstructions(), contextText ? `Current briefing:\n${contextText}` : ""]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildMessages(history, userText, contextText) {
   const text = String(userText || "").trim();
   if (!text) {
     throw new Error("Type something first, citizen.");
   }
 
-  const messages = [{ role: "system", content: SYSTEM_PROMPT }];
-  const recent = Array.isArray(history) ? history.slice(-16) : [];
+  const messages = [{ role: "system", content: composeSystem(contextText) }];
+  const recent = Array.isArray(history) ? history.slice(-32) : [];
   for (const turn of recent) {
     if (!turn || (turn.role !== "user" && turn.role !== "assistant")) continue;
     const content = String(turn.content || "").trim();
@@ -78,8 +86,8 @@ function buildMessages(history, userText) {
   return messages;
 }
 
-function buildGeminiContents(history, userText) {
-  const messages = buildMessages(history, userText).filter((item) => item.role !== "system");
+function buildGeminiContents(history, userText, contextText) {
+  const messages = buildMessages(history, userText, contextText).filter((item) => item.role !== "system");
   return messages.map((item) => ({
     role: item.role === "assistant" ? "model" : "user",
     parts: [{ text: item.content }],
@@ -122,7 +130,7 @@ async function readJson(response) {
   }
 }
 
-async function askOpenAI({ apiKey, model, history, userText, fetchFn }) {
+async function askOpenAI({ apiKey, model, history, userText, fetchFn, contextText }) {
   const response = await fetchFn(OPENAI_URL, {
     method: "POST",
     headers: {
@@ -132,8 +140,8 @@ async function askOpenAI({ apiKey, model, history, userText, fetchFn }) {
     body: JSON.stringify({
       model: model || DEFAULT_OPENAI_MODEL,
       temperature: 0.7,
-      max_tokens: 500,
-      messages: buildMessages(history, userText),
+      max_tokens: 700,
+      messages: buildMessages(history, userText, contextText),
     }),
   });
 
@@ -179,7 +187,7 @@ function wait(ms, sleepImpl) {
   return sleep(ms);
 }
 
-async function askGeminiOnce({ apiKey, model, history, userText, fetchFn }) {
+async function askGeminiOnce({ apiKey, model, history, userText, fetchFn, contextText }) {
   const response = await fetchFn(geminiUrl(model), {
     method: "POST",
     headers: {
@@ -187,9 +195,9 @@ async function askGeminiOnce({ apiKey, model, history, userText, fetchFn }) {
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
-      contents: buildGeminiContents(history, userText),
+      system_instruction: { parts: [{ text: composeSystem(contextText) }] },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 700 },
+      contents: buildGeminiContents(history, userText, contextText),
     }),
   });
 
@@ -201,7 +209,7 @@ async function askGeminiOnce({ apiKey, model, history, userText, fetchFn }) {
   return parseGeminiReply(payload);
 }
 
-async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl }) {
+async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl, contextText }) {
   const models = [model, ...GEMINI_FALLBACKS].filter(
     (name, index, list) => name && list.indexOf(name) === index
   );
@@ -209,7 +217,7 @@ async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl 
   for (const candidate of models) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn });
+        return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn, contextText });
       } catch (error) {
         lastError = error;
         if (isBusyGemini(error.message)) {
@@ -224,7 +232,7 @@ async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl 
   throw friendlyGeminiError(lastError || new Error("Gemini has no working model right now."));
 }
 
-async function askBatman({ provider, apiKey, model, history, userText, fetchImpl, sleepImpl }) {
+async function askBatman({ provider, apiKey, model, history, userText, fetchImpl, sleepImpl, contextText }) {
   const key = String(apiKey || "").trim();
   const kind = normalizeProvider(provider);
   if (!key) {
@@ -242,9 +250,9 @@ async function askBatman({ provider, apiKey, model, history, userText, fetchImpl
 
   const resolved = resolveModel(kind, model);
   if (kind === "openai") {
-    return askOpenAI({ apiKey: key, model: resolved, history, userText, fetchFn });
+    return askOpenAI({ apiKey: key, model: resolved, history, userText, fetchFn, contextText });
   }
-  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn, sleepImpl });
+  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn, sleepImpl, contextText });
 }
 
 module.exports = {
@@ -254,7 +262,7 @@ module.exports = {
   DEFAULT_PROVIDER,
   GEMINI_FALLBACKS,
   OPENAI_URL,
-  SYSTEM_PROMPT,
+  composeSystem,
   normalizeProvider,
   defaultModelFor,
   resolveModel,

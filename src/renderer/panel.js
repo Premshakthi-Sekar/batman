@@ -8,11 +8,16 @@ const provider = document.getElementById("provider");
 const keyLabel = document.getElementById("key-label");
 const keyHint = document.getElementById("key-hint");
 const keyStatus = document.getElementById("key-status");
+const briefingLine = document.getElementById("briefing-line");
+const tasksToday = document.getElementById("tasks-today");
+const tasksTomorrow = document.getElementById("tasks-tomorrow");
 
 const DEFAULTS = {
   gemini: "gemini-3.7-flash",
   openai: "gpt-4o-mini",
 };
+
+let paintedHistory = false;
 
 function showTab(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -37,6 +42,28 @@ function describeProvider(value) {
   }
 }
 
+function renderTaskList(node, items) {
+  node.innerHTML = "";
+  if (!items || !items.length) {
+    node.innerHTML = '<p class="hint">None yet.</p>';
+    return;
+  }
+  items.forEach((item) => {
+    const row = document.createElement("label");
+    row.className = `task-row${item.done ? " done" : ""}`;
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = Boolean(item.done);
+    box.addEventListener("change", async () => {
+      applyState(await window.batman.toggleTask(item.id));
+    });
+    const text = document.createElement("span");
+    text.textContent = item.text;
+    row.append(box, text);
+    node.appendChild(row);
+  });
+}
+
 function applyState(state) {
   if (!state) return;
   status.textContent = state.asleep ? `Sleeping · ${state.remaining} left` : "On patrol";
@@ -44,6 +71,27 @@ function applyState(state) {
   describeProvider(provider.value);
   if (state.model) model.value = state.model;
   keyStatus.textContent = state.hasKey ? "A key is already saved for this provider." : "No key saved yet.";
+  if (Array.isArray(state.reminderTimes)) {
+    ["t1", "t2", "t3", "t4"].forEach((id, index) => {
+      const input = document.getElementById(id);
+      if (input && state.reminderTimes[index]) input.value = state.reminderTimes[index];
+    });
+  }
+  if (briefingLine) {
+    const open = (state.tasksToday || []).filter((item) => !item.done).length;
+    briefingLine.textContent = open
+      ? `${open} open today. I'll ping you four times. Sleep is fine; full Quit pauses reminders.`
+      : "No open tasks today. Tonight, tell me tomorrow's list in Ask.";
+  }
+  renderTaskList(tasksToday, state.tasksToday);
+  renderTaskList(tasksTomorrow, state.tasksTomorrow);
+  if (!paintedHistory && state.history && state.history.length) {
+    paintedHistory = true;
+    log.innerHTML = "";
+    state.history.forEach((turn) => {
+      addBubble(turn.role === "user" ? "you" : "batman", turn.content);
+    });
+  }
 }
 
 function addBubble(role, text) {
@@ -90,11 +138,26 @@ document.getElementById("save").addEventListener("click", async () => {
       provider: provider.value,
       apiKey: apiKey.value,
       model: model.value,
+      reminderTimes: ["t1", "t2", "t3", "t4"].map((id) => document.getElementById(id).value),
     })
   );
   apiKey.value = "";
   addBubble("batman", "Settings saved. I will remember.");
   showTab("chat");
+});
+
+document.getElementById("task-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.getElementById("task-text");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  applyState(
+    await window.batman.addTask({
+      text,
+      when: document.getElementById("task-when").value,
+    })
+  );
 });
 
 form.addEventListener("submit", async (event) => {
@@ -108,6 +171,7 @@ form.addEventListener("submit", async (event) => {
   try {
     const reply = await window.batman.ask(text);
     placeholder.textContent = reply;
+    applyState(await window.batman.getState());
   } catch (error) {
     placeholder.classList.add("error");
     placeholder.textContent = error?.message || "The line went dead.";

@@ -17,6 +17,7 @@
 
       <nav>
         <button class="tab active" data-tab="chat" type="button">Ask</button>
+        <button class="tab" data-tab="tasks" type="button">Today</button>
         <button class="tab" data-tab="sleep" type="button">Sleep</button>
         <button class="tab" data-tab="settings" type="button">Settings</button>
       </nav>
@@ -24,12 +25,28 @@
       <section id="chat" class="page active">
         <div id="log" class="log">
           <div class="bubble batman">
-            Speak. I am on patrol, but I can spare a moment.
+            I'm your PA now. At night, dump tomorrow's list. I'll remind you four times the next day. Click me again to close this box.
           </div>
         </div>
         <form id="ask-form">
-          <input id="prompt" type="text" placeholder="Ask Batman anything..." autocomplete="off" />
+          <input id="prompt" type="text" placeholder="Talk to Batman..." autocomplete="off" />
           <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section id="tasks" class="page">
+        <p class="hint" id="briefing-line">No tasks yet. Tell me tonight's list in Ask.</p>
+        <h3>Today</h3>
+        <div id="tasks-today" class="task-list"></div>
+        <h3>Tomorrow</h3>
+        <div id="tasks-tomorrow" class="task-list"></div>
+        <form id="task-form" class="task-form">
+          <input id="task-text" type="text" placeholder="Add a task..." autocomplete="off" />
+          <select id="task-when">
+            <option value="tomorrow">Tomorrow</option>
+            <option value="today">Today</option>
+          </select>
+          <button type="submit">Add</button>
         </form>
       </section>
 
@@ -62,6 +79,18 @@
         </label>
         <p id="key-hint" class="hint">
           Get a free key at aistudio.google.com/apikey. It stays on this computer only.
+        </p>
+        <label>
+          Four reminder times (next day)
+          <div class="times">
+            <input id="t1" type="time" value="09:00" />
+            <input id="t2" type="time" value="12:00" />
+            <input id="t3" type="time" value="16:00" />
+            <input id="t4" type="time" value="21:00" />
+          </div>
+        </label>
+        <p class="hint">
+          Keep Batman running (or Sleep, not full Quit) so the four pings can fire.
         </p>
         <p id="key-status" class="hint"></p>
         <button id="save" type="button">Save</button>

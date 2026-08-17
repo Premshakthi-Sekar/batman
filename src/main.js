@@ -1,16 +1,31 @@
 "use strict";
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, Notification } = require("electron");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createStore } = require("./store");
 const { sleepUntil, isAsleep, remainingMs, formatRemaining } = require("./sleep");
 const { askBatman, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor, resolveModel } = require("./chat");
+const {
+  DEFAULT_REMINDER_TIMES,
+  dateKey,
+  tomorrowKey,
+  reminderTimes,
+  addTasks,
+  openTasks,
+  toggleTask,
+  briefing,
+  reminderBody,
+  dueReminderSlots,
+  recordFired,
+  extractPaBlock,
+  applyPaActions,
+} = require("./pa");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 340;
-const PANEL_HEIGHT = 460;
+const PANEL_HEIGHT = 520;
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -46,7 +61,7 @@ let wanderTimer;
 let paused = false;
 let dragging = false;
 let hovering = false;
-let dragGrab = { x: 0, y: 0 };
+let reminderTimer;
 
 const wander = {
   x: 80,
@@ -230,6 +245,8 @@ function publicState() {
   const wakeAt = store.get("wakeAt", 0);
   const asleep = isAsleep(wakeAt);
   const provider = currentProvider();
+  const now = new Date();
+  const tasks = store.get("tasks", []);
   return {
     asleep,
     remaining: formatRemaining(wakeAt),
@@ -237,7 +254,47 @@ function publicState() {
     hasKey: Boolean(String(currentApiKey()).trim()),
     provider,
     model: resolveModel(provider, store.get("model")),
+    today: dateKey(now),
+    tomorrow: tomorrowKey(now),
+    tasksToday: tasks.filter((item) => item.forDate === dateKey(now)),
+    tasksTomorrow: tasks.filter((item) => item.forDate === tomorrowKey(now)),
+    reminderTimes: reminderTimes(store.get("reminderTimes", DEFAULT_REMINDER_TIMES)),
+    facts: store.get("facts", []),
+    history: (store.get("history", []) || []).slice(-16),
+    briefing: briefing(tasks, store.get("facts", []), now),
   };
+}
+
+function notify(title, body) {
+  if (!body) return;
+  try {
+    if (Notification.isSupported()) {
+      const note = new Notification({ title, body, silent: false });
+      note.on("click", () => showPanel());
+      note.show();
+    }
+  } catch {
+    // ignore missing notification support
+  }
+}
+
+function tickReminders() {
+  if (!store) return;
+  const now = new Date();
+  const tasks = store.get("tasks", []);
+  const times = reminderTimes(store.get("reminderTimes", DEFAULT_REMINDER_TIMES));
+  const fired = store.get("reminderFired", {});
+  const due = dueReminderSlots(now, times, fired, openTasks(tasks, dateKey(now)).length > 0);
+  if (!due.length) return;
+  const body = reminderBody(tasks, now);
+  if (body) notify("Batman · daily patrol", body);
+  store.set("reminderFired", recordFired(fired, dateKey(now), due));
+}
+
+function startReminderLoop() {
+  if (reminderTimer) clearInterval(reminderTimer);
+  tickReminders();
+  reminderTimer = setInterval(tickReminders, 20000);
 }
 
 function scheduleWake() {
@@ -429,23 +486,46 @@ function registerIpc() {
     } else {
       store.set("model", defaultModelFor(provider));
     }
+    if (payload.reminderTimes) {
+      store.set("reminderTimes", reminderTimes(payload.reminderTimes));
+    }
+    return publicState();
+  });
+
+  ipcMain.handle("add-task", (_event, payload) => {
+    const when = payload && payload.when === "today" ? dateKey() : tomorrowKey();
+    store.set("tasks", addTasks(store.get("tasks", []), [payload && payload.text], when));
+    return publicState();
+  });
+
+  ipcMain.handle("toggle-task", (_event, id) => {
+    store.set("tasks", toggleTask(store.get("tasks", []), id));
     return publicState();
   });
 
   ipcMain.handle("ask", async (_event, userText) => {
     const provider = currentProvider();
-    const reply = await askBatman({
+    const contextText = briefing(store.get("tasks", []), store.get("facts", []));
+    const raw = await askBatman({
       provider,
       apiKey: currentApiKey(),
       model: resolveModel(provider, store.get("model")),
       history: store.get("history", []),
       userText,
+      contextText,
     });
+    const { visible, actions } = extractPaBlock(raw);
+    const next = applyPaActions(
+      { tasks: store.get("tasks", []), facts: store.get("facts", []) },
+      actions
+    );
+    store.set("tasks", next.tasks);
+    store.set("facts", next.facts);
     const history = store.get("history", []);
-    history.push({ role: "user", content: String(userText).trim() });
-    history.push({ role: "assistant", content: reply });
-    store.set("history", history.slice(-20));
-    return reply;
+    history.push({ role: "user", content: String(userText).trim(), at: Date.now() });
+    history.push({ role: "assistant", content: visible, at: Date.now() });
+    store.set("history", history.slice(-120));
+    return visible;
   });
 
   ipcMain.handle("quit", () => {
@@ -471,6 +551,10 @@ app.whenReady().then(() => {
   if (!store.get("provider")) store.set("provider", DEFAULT_PROVIDER);
   store.set("model", resolveModel(currentProvider(), store.get("model")));
   if (!store.get("history")) store.set("history", []);
+  if (!store.get("tasks")) store.set("tasks", []);
+  if (!store.get("facts")) store.set("facts", []);
+  if (!store.get("reminderTimes")) store.set("reminderTimes", DEFAULT_REMINDER_TIMES);
+  if (!store.get("reminderFired")) store.set("reminderFired", {});
 
   createWindows();
   registerIpc();
@@ -492,6 +576,7 @@ app.whenReady().then(() => {
     petWindow.showInactive();
   }
   startWander();
+  startReminderLoop();
 
   screen.on("display-metrics-changed", () => applyPetPosition());
 });
@@ -504,4 +589,5 @@ app.on("before-quit", () => {
   clearPid();
   stopWander();
   if (sleepTimer) clearTimeout(sleepTimer);
+  if (reminderTimer) clearInterval(reminderTimer);
 });

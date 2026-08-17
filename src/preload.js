@@ -39,6 +39,12 @@ contextBridge.exposeInMainWorld("batman", {
   saveSettings(payload) {
     return ipcRenderer.invoke("save-settings", payload);
   },
+  addTask(payload) {
+    return ipcRenderer.invoke("add-task", payload);
+  },
+  toggleTask(id) {
+    return ipcRenderer.invoke("toggle-task", id);
+  },
   ask(text) {
     return ipcRenderer.invoke("ask", text);
   },

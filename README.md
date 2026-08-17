@@ -6,7 +6,10 @@ A tiny Batman lives on your desktop. He wanders around the screen on his own. Cl
 
 - Walks randomly around your screen, always on top
 - Click him to open a small panel
-- **Ask**: type a question and he answers through **Google Gemini** (free) or OpenAI
+- **Ask**: chat with memory. At night, dump tomorrow's to-do list.
+- **Today**: see today's and tomorrow's tasks, tick them off.
+- Four Mac notifications the next day (default 9:00, 12:00, 16:00, 21:00).
+- **Sleep**: hide him for 2, 3, or 4 hours. When the timer ends, he comes back on patrol
 - **Sleep**: hide him for 2, 3, or 4 hours. When the timer ends, he comes back on patrol
 - **Settings**: paste a Gemini or OpenAI API key (saved only on this computer)
 - Tray icon: sleep, wake, ask, or quit even if you cannot see him

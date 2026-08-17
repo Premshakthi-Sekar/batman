@@ -41,7 +41,7 @@ test("buildMessages adds the batman system prompt and trims history", () => {
   assert.equal(messages[0].role, "system");
   assert.match(messages[0].content, /tiny Batman/);
   assert.equal(messages[messages.length - 1].content, "hello");
-  assert.ok(messages.length <= 18);
+  assert.ok(messages.length <= 34);
 });
 
 test("parseGeminiReply reads Gemini candidate text", () => {
