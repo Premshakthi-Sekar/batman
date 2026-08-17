@@ -20,12 +20,12 @@ const {
   dueReminderSlots,
   recordFired,
   extractPaBlock,
-  captureFromUserText,
   applyPaActions,
   tasksForDate,
   tidyTasks,
   describeChange,
 } = require("./pa");
+const { INTENT_PROMPT, parseIntentReply, listSnapshot, decideTurn, spokenResult } = require("./intent");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 340;
@@ -513,24 +513,80 @@ function registerIpc() {
     const now = new Date();
     const history = [...(store.get("history", []) || [])];
     const before = store.get("tasks", []);
-    const fromChat = captureFromUserText(userText, now, history);
-    const next = applyPaActions({ tasks: before, facts: store.get("facts", []) }, fromChat, now);
-    store.set("tasks", next.tasks);
-    store.set("facts", next.facts);
-    const ground = describeChange(before, next.tasks, userText, fromChat);
-    const contextText = [briefing(next.tasks, next.facts, now), "GROUND TRUTH after applying the user's request:", ground].join(
-      "\n\n"
-    );
+    const pending = store.get("pendingClarify", null);
     const provider = currentProvider();
-    const raw = await askBatman({
+    const askOpts = {
       provider,
       apiKey: currentApiKey(),
       model: resolveModel(provider, store.get("model")),
       history,
       userText,
-      contextText,
+    };
+
+    let llmIntent = null;
+    try {
+      const intentRaw = await askBatman({
+        ...askOpts,
+        contextText: listSnapshot(before),
+        options: {
+          systemOverride: INTENT_PROMPT,
+          temperature: 0.2,
+          maxTokens: 400,
+          historySlice: -8,
+        },
+      });
+      llmIntent = parseIntentReply(intentRaw);
+    } catch {
+      llmIntent = null;
+    }
+
+    const decision = decideTurn({
+      userText,
+      tasks: before,
+      history,
+      llmIntent,
+      pending,
+      now,
     });
-    const { visible } = extractPaBlock(raw);
+
+    if (decision.question) {
+      store.set("pendingClarify", decision.pending || null);
+      history.push({ role: "user", content: String(userText).trim(), at: Date.now() });
+      history.push({ role: "assistant", content: decision.question, at: Date.now() });
+      store.set("history", history.slice(-120));
+      return decision.question;
+    }
+
+    store.set("pendingClarify", null);
+    const fromChat = decision.actions || { addTomorrow: [], addToday: [], done: [], remember: [], update: [], remove: [], removeDuplicates: false };
+    const next = applyPaActions({ tasks: before, facts: store.get("facts", []) }, fromChat, now);
+    store.set("tasks", next.tasks);
+    store.set("facts", next.facts);
+    const ground = describeChange(before, next.tasks, userText, fromChat);
+    const fallback = spokenResult(decision, ground);
+    let visible = fallback;
+    if (decision.chat || !fallback) {
+      const raw = await askBatman({
+        ...askOpts,
+        contextText: [briefing(next.tasks, next.facts, now), "GROUND TRUTH:", ground].join("\n\n"),
+      });
+      visible = extractPaBlock(raw).visible;
+    } else {
+      try {
+        const raw = await askBatman({
+          ...askOpts,
+          contextText: [
+            briefing(next.tasks, next.facts, now),
+            "GROUND TRUTH:",
+            ground,
+            "Confirm this in one or two short Batman sentences. Do not claim extra work.",
+          ].join("\n\n"),
+        });
+        visible = extractPaBlock(raw).visible || fallback;
+      } catch {
+        visible = fallback;
+      }
+    }
     history.push({ role: "user", content: String(userText).trim(), at: Date.now() });
     history.push({ role: "assistant", content: visible, at: Date.now() });
     store.set("history", history.slice(-120));

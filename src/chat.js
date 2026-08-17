@@ -62,20 +62,23 @@ function resolveModel(provider, model) {
   return name || defaultModelFor(kind);
 }
 
-function composeSystem(contextText) {
+function composeSystem(contextText, options = {}) {
+  if (options.systemOverride) {
+    return [options.systemOverride, contextText].filter(Boolean).join("\n\n");
+  }
   return [SYSTEM_PROMPT, paInstructions(), contextText ? `Current briefing:\n${contextText}` : ""]
     .filter(Boolean)
     .join("\n\n");
 }
 
-function buildMessages(history, userText, contextText) {
+function buildMessages(history, userText, contextText, options = {}) {
   const text = String(userText || "").trim();
   if (!text) {
     throw new Error("Type something first, citizen.");
   }
 
-  const messages = [{ role: "system", content: composeSystem(contextText) }];
-  const recent = Array.isArray(history) ? history.slice(-32) : [];
+  const messages = [{ role: "system", content: composeSystem(contextText, options) }];
+  const recent = Array.isArray(history) ? history.slice(options.historySlice || -32) : [];
   for (const turn of recent) {
     if (!turn || (turn.role !== "user" && turn.role !== "assistant")) continue;
     const content = String(turn.content || "").trim();
@@ -86,8 +89,8 @@ function buildMessages(history, userText, contextText) {
   return messages;
 }
 
-function buildGeminiContents(history, userText, contextText) {
-  const messages = buildMessages(history, userText, contextText).filter((item) => item.role !== "system");
+function buildGeminiContents(history, userText, contextText, options = {}) {
+  const messages = buildMessages(history, userText, contextText, options).filter((item) => item.role !== "system");
   return messages.map((item) => ({
     role: item.role === "assistant" ? "model" : "user",
     parts: [{ text: item.content }],
@@ -130,7 +133,7 @@ async function readJson(response) {
   }
 }
 
-async function askOpenAI({ apiKey, model, history, userText, fetchFn, contextText }) {
+async function askOpenAI({ apiKey, model, history, userText, fetchFn, contextText, options }) {
   const response = await fetchFn(OPENAI_URL, {
     method: "POST",
     headers: {
@@ -139,9 +142,9 @@ async function askOpenAI({ apiKey, model, history, userText, fetchFn, contextTex
     },
     body: JSON.stringify({
       model: model || DEFAULT_OPENAI_MODEL,
-      temperature: 0.7,
-      max_tokens: 700,
-      messages: buildMessages(history, userText, contextText),
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.maxTokens ?? 700,
+      messages: buildMessages(history, userText, contextText, options),
     }),
   });
 
@@ -187,7 +190,7 @@ function wait(ms, sleepImpl) {
   return sleep(ms);
 }
 
-async function askGeminiOnce({ apiKey, model, history, userText, fetchFn, contextText }) {
+async function askGeminiOnce({ apiKey, model, history, userText, fetchFn, contextText, options }) {
   const response = await fetchFn(geminiUrl(model), {
     method: "POST",
     headers: {
@@ -195,9 +198,12 @@ async function askGeminiOnce({ apiKey, model, history, userText, fetchFn, contex
       "x-goog-api-key": apiKey,
     },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: composeSystem(contextText) }] },
-      generationConfig: { temperature: 0.7, maxOutputTokens: 700 },
-      contents: buildGeminiContents(history, userText, contextText),
+      system_instruction: { parts: [{ text: composeSystem(contextText, options) }] },
+      generationConfig: {
+        temperature: options?.temperature ?? 0.7,
+        maxOutputTokens: options?.maxTokens ?? 700,
+      },
+      contents: buildGeminiContents(history, userText, contextText, options),
     }),
   });
 
@@ -209,7 +215,7 @@ async function askGeminiOnce({ apiKey, model, history, userText, fetchFn, contex
   return parseGeminiReply(payload);
 }
 
-async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl, contextText }) {
+async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl, contextText, options }) {
   const models = [model, ...GEMINI_FALLBACKS].filter(
     (name, index, list) => name && list.indexOf(name) === index
   );
@@ -217,7 +223,7 @@ async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl,
   for (const candidate of models) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn, contextText });
+        return await askGeminiOnce({ apiKey, model: candidate, history, userText, fetchFn, contextText, options });
       } catch (error) {
         lastError = error;
         if (isBusyGemini(error.message)) {
@@ -232,7 +238,7 @@ async function askGemini({ apiKey, model, history, userText, fetchFn, sleepImpl,
   throw friendlyGeminiError(lastError || new Error("Gemini has no working model right now."));
 }
 
-async function askBatman({ provider, apiKey, model, history, userText, fetchImpl, sleepImpl, contextText }) {
+async function askBatman({ provider, apiKey, model, history, userText, fetchImpl, sleepImpl, contextText, options }) {
   const key = String(apiKey || "").trim();
   const kind = normalizeProvider(provider);
   if (!key) {
@@ -250,9 +256,9 @@ async function askBatman({ provider, apiKey, model, history, userText, fetchImpl
 
   const resolved = resolveModel(kind, model);
   if (kind === "openai") {
-    return askOpenAI({ apiKey: key, model: resolved, history, userText, fetchFn, contextText });
+    return askOpenAI({ apiKey: key, model: resolved, history, userText, fetchFn, contextText, options });
   }
-  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn, sleepImpl, contextText });
+  return askGemini({ apiKey: key, model: resolved, history, userText, fetchFn, sleepImpl, contextText, options });
 }
 
 module.exports = {

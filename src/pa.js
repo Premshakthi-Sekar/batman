@@ -356,6 +356,24 @@ function findTask(list, needle) {
   return undefined;
 }
 
+function rankedMatches(tasks, needle) {
+  const open = (Array.isArray(tasks) ? tasks : []).filter((item) => !item.done);
+  const hint = String(needle || "").trim();
+  return open
+    .map((item) => ({ item, score: matchScore(item, hint) }))
+    .filter((row) => row.score >= 3)
+    .sort((a, b) => b.score - a.score);
+}
+
+function hourBefore(time) {
+  const normalized = normalizeTime(time);
+  if (!normalized) return null;
+  const [hour, minute] = normalized.split(":").map(Number);
+  const total = hour * 60 + minute - 60;
+  if (total < 0) return "00:00";
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+}
+
 function shouldRemove(item, needle) {
   const hint = String(needle || "").trim();
   if (!hint || !item) return false;
@@ -718,5 +736,11 @@ module.exports = {
   tidyTasks,
   removeTasks,
   describeChange,
+  rankedMatches,
+  findTask,
+  hourBefore,
+  emptyActions,
+  isPrepTask,
+  isCallish,
   paInstructions,
 };
