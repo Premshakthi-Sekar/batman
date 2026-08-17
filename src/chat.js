@@ -2,7 +2,7 @@
 
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_GEMINI_MODEL = "gemini-3.7-flash";
-const DEFAULT_PROVIDER = "gemini";
+const DEFAULT_PROVIDER = "openai";
 const GEMINI_FALLBACKS = [
   "gemini-3.7-flash",
   "gemini-3.5-flash-lite",
@@ -22,8 +22,12 @@ const SYSTEM_PROMPT = [
   "Never claim you can physically control the user's computer beyond this companion app.",
 ].join(" ");
 
+function looksLikeOpenAIKey(key) {
+  return String(key || "").trim().startsWith("sk-");
+}
+
 function normalizeProvider(provider) {
-  return String(provider || DEFAULT_PROVIDER).toLowerCase() === "openai" ? "openai" : "gemini";
+  return String(provider || DEFAULT_PROVIDER).toLowerCase() === "gemini" ? "gemini" : "openai";
 }
 
 function defaultModelFor(provider) {
@@ -277,5 +281,6 @@ module.exports = {
   parseReply,
   parseGeminiReply,
   geminiUrl,
+  looksLikeOpenAIKey,
   askBatman,
 };

@@ -6,7 +6,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { sleepUntil, remainingMs, isAsleep, formatRemaining, HOUR_MS } = require("../src/sleep");
-const { buildMessages, parseReply, parseGeminiReply, askBatman, resolveModel } = require("../src/chat");
+const { buildMessages, parseReply, parseGeminiReply, askBatman, resolveModel, looksLikeOpenAIKey } = require("../src/chat");
 const { createStore } = require("../src/store");
 
 test("sleepUntil is two, three, or four hours later", () => {
@@ -64,12 +64,38 @@ test("askBatman requires an API key", async () => {
   await assert.rejects(() => askBatman({ apiKey: "", userText: "hi" }), /API key/);
 });
 
+test("sk- keys are treated as OpenAI", () => {
+  assert.equal(looksLikeOpenAIKey("sk-abc"), true);
+  assert.equal(looksLikeOpenAIKey("AIza-gemini"), false);
+});
+
+test("askBatman uses OpenAI by default", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "I am vengeance." } }],
+      }),
+    };
+  };
+  const reply = await askBatman({
+    apiKey: "sk-test",
+    userText: "status?",
+    history: [],
+    fetchImpl,
+  });
+  assert.equal(reply, "I am vengeance.");
+  assert.match(calls[0].url, /chat\/completions/);
+});
+
 test("resolveModel upgrades retired Gemini models", () => {
   assert.equal(resolveModel("gemini", "gpt-4o-mini"), "gemini-3.7-flash");
   assert.equal(resolveModel("gemini", "gemini-2.5-flash"), "gemini-3.7-flash");
 });
 
-test("askBatman posts to Gemini by default and returns the reply", async () => {
+test("askBatman posts to Gemini when that provider is selected", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
@@ -81,6 +107,7 @@ test("askBatman posts to Gemini by default and returns the reply", async () => {
     };
   };
   const reply = await askBatman({
+    provider: "gemini",
     apiKey: "gemini-test",
     model: "gpt-4o-mini",
     userText: "status?",
@@ -144,6 +171,7 @@ test("askBatman retries when Gemini is busy then answers", async () => {
     };
   };
   const reply = await askBatman({
+    provider: "gemini",
     apiKey: "gemini-test",
     userText: "status?",
     fetchImpl,

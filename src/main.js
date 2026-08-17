@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { createStore } = require("./store");
 const { sleepUntil, isAsleep, remainingMs, formatRemaining } = require("./sleep");
-const { askBatman, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor, resolveModel } = require("./chat");
+const { askBatman, DEFAULT_PROVIDER, normalizeProvider, defaultModelFor, resolveModel, looksLikeOpenAIKey } = require("./chat");
 const {
   DEFAULT_REMINDER_TIMES,
   dateKey,
@@ -235,15 +235,22 @@ function togglePanel() {
 }
 
 function currentProvider() {
-  return normalizeProvider(store.get("provider", DEFAULT_PROVIDER));
+  const openaiKey = store.get("openaiKey", store.get("apiKey", process.env.OPENAI_API_KEY || ""));
+  const geminiKey = store.get("geminiKey", process.env.GEMINI_API_KEY || "");
+  if (looksLikeOpenAIKey(openaiKey) || looksLikeOpenAIKey(geminiKey)) return "openai";
+  const stored = store.get("provider");
+  if (stored) return normalizeProvider(stored);
+  if (String(openaiKey || "").trim() && !String(geminiKey || "").trim()) return "openai";
+  return DEFAULT_PROVIDER;
 }
 
 function currentApiKey() {
-  const provider = currentProvider();
-  if (provider === "openai") {
-    return store.get("openaiKey", store.get("apiKey", process.env.OPENAI_API_KEY || ""));
+  const openaiKey = store.get("openaiKey", store.get("apiKey", process.env.OPENAI_API_KEY || ""));
+  const geminiKey = store.get("geminiKey", process.env.GEMINI_API_KEY || "");
+  if (currentProvider() === "openai") {
+    return looksLikeOpenAIKey(geminiKey) && !String(openaiKey || "").trim() ? geminiKey : openaiKey;
   }
-  return store.get("geminiKey", process.env.GEMINI_API_KEY || "");
+  return geminiKey;
 }
 
 function publicState() {
@@ -481,11 +488,13 @@ function registerIpc() {
 
   ipcMain.handle("save-settings", (_event, payload) => {
     if (!payload || typeof payload !== "object") return publicState();
-    const provider = normalizeProvider(payload.provider || currentProvider());
+    let provider = normalizeProvider(payload.provider || currentProvider());
+    const incomingKey = typeof payload.apiKey === "string" ? payload.apiKey.trim() : "";
+    if (looksLikeOpenAIKey(incomingKey)) provider = "openai";
     store.set("provider", provider);
-    if (typeof payload.apiKey === "string" && payload.apiKey.trim()) {
-      if (provider === "openai") store.set("openaiKey", payload.apiKey.trim());
-      else store.set("geminiKey", payload.apiKey.trim());
+    if (incomingKey) {
+      if (provider === "openai") store.set("openaiKey", incomingKey);
+      else store.set("geminiKey", incomingKey);
     }
     if (typeof payload.model === "string" && payload.model.trim()) {
       store.set("model", resolveModel(provider, payload.model.trim()));
@@ -613,7 +622,13 @@ app.whenReady().then(() => {
     if (app.dock) app.dock.hide();
   }
   store = createStore(storePath());
-  if (!store.get("provider")) store.set("provider", DEFAULT_PROVIDER);
+  const misplaced = store.get("geminiKey", "");
+  if (looksLikeOpenAIKey(misplaced)) {
+    if (!store.get("openaiKey")) store.set("openaiKey", misplaced);
+    store.set("geminiKey", "");
+    store.set("provider", "openai");
+  }
+  if (!store.get("provider")) store.set("provider", currentProvider());
   store.set("model", resolveModel(currentProvider(), store.get("model")));
   if (!store.get("history")) store.set("history", []);
   if (!store.get("tasks")) store.set("tasks", []);

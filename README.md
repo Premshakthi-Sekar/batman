@@ -16,14 +16,14 @@ A tiny Batman lives on your desktop. He wanders around the screen on his own. Cl
 
 ## Run it
 
-You need Node.js 18+ and a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). OpenAI still works if you have billing credit.
+You need Node.js 18+ and an OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys) (needs billing credit). Gemini still works if you prefer a free key.
 
 ```bash
 npm install
 npm start
 ```
 
-Click Batman → **Settings** → Provider **Google Gemini (free)** → paste the key → **Save**. The default model is `gemini-3.7-flash`.
+Click Batman → **Settings** → Provider **OpenAI** → paste your `sk-...` key → **Save**. The default model is `gpt-4o-mini`. If you paste an `sk-` key while Gemini is selected, Batman still uses OpenAI.
 
 Drag him around the screen. Hover the cursor over him for a backflip or fight stance. A normal click still opens chat.
 
@@ -31,7 +31,7 @@ Optional: set the key in the environment instead of the Settings tab.
 
 ```bash
 # macOS / Linux
-export GEMINI_API_KEY=your-gemini-key
+export OPENAI_API_KEY=sk-your-key
 npm start
 ```
 

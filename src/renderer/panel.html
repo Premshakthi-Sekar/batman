@@ -65,20 +65,20 @@
         <label>
           Provider
           <select id="provider">
-            <option value="gemini">Google Gemini (free)</option>
             <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini (free)</option>
           </select>
         </label>
         <label>
-          <span id="key-label">Gemini API key</span>
-          <input id="api-key" type="password" placeholder="Paste key" autocomplete="off" />
+          <span id="key-label">OpenAI API key</span>
+          <input id="api-key" type="password" placeholder="sk-..." autocomplete="off" />
         </label>
         <label>
           Model
-          <input id="model" type="text" value="gemini-3.7-flash" />
+          <input id="model" type="text" value="gpt-4o-mini" />
         </label>
         <p id="key-hint" class="hint">
-          Get a free key at aistudio.google.com/apikey. It stays on this computer only.
+          Get a key from platform.openai.com. It stays on this computer only.
         </p>
         <label>
           Four reminder times (next day)
