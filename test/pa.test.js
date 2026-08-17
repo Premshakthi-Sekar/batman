@@ -155,3 +155,44 @@ test("repeat Demi chat does not create a second task", () => {
   state = applyPaActions(state, captureFromUserText("i have a call with Demi tmrw 11 AM"), now);
   assert.equal(state.tasks.filter((item) => !item.done).length, 1);
 });
+
+test("add a reminder tmrw to run leads is a separate tomorrow task", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const phrase = "add a reminder tmrw to run a fresh leads for demi before call";
+  const actions = captureFromUserText(phrase);
+  assert.equal(actions.addTomorrow.length, 1);
+  assert.match(actions.addTomorrow[0].text, /leads/i);
+  assert.match(actions.addTomorrow[0].text, /demi/i);
+  let state = applyPaActions(
+    { tasks: [], facts: [] },
+    captureFromUserText("i have a call with Demi tmrw 11 AM"),
+    now
+  );
+  state = applyPaActions(state, actions, now);
+  assert.equal(state.tasks.filter((item) => !item.done).length, 2);
+});
+
+test("did u add replays the last real task from history", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const history = [{ role: "user", content: "add a reminder tmrw to run a fresh leads for demi before call" }];
+  const actions = captureFromUserText("did u add?", now, history);
+  assert.equal(actions.addTomorrow.length, 1);
+  assert.match(actions.addTomorrow[0].text, /leads/i);
+});
+
+test("model filler JSON still salvages the leads task", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const next = applyPaActions(
+    { tasks: [], facts: [] },
+    {
+      addTomorrow: ["I will add the reminder to run fresh leads for Demi before your call tomorrow"],
+      addToday: [],
+      done: [],
+      remember: [],
+      update: [],
+    },
+    now
+  );
+  assert.equal(next.tasks.length, 1);
+  assert.match(next.tasks[0].text, /leads/i);
+});

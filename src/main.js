@@ -521,7 +521,7 @@ function registerIpc() {
       contextText,
     });
     const { visible, actions } = extractPaBlock(raw);
-    const fromChat = captureFromUserText(userText);
+    const fromChat = captureFromUserText(userText, new Date(), store.get("history", []));
     const next = applyPaActions(
       { tasks: store.get("tasks", []), facts: store.get("facts", []) },
       mergeActions(actions, fromChat)
