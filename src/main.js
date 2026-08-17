@@ -192,7 +192,8 @@ function followPanel() {
   panelWindow.setBounds(panelPosition());
 }
 
-function overlayWindowOptions(extra) {
+function overlayWindowOptions(extra = {}) {
+  const { asPanel = true, ...rest } = extra;
   return {
     frame: false,
     transparent: true,
@@ -203,14 +204,76 @@ function overlayWindowOptions(extra) {
     fullscreenable: false,
     hiddenInMissionControl: true,
     acceptFirstMouse: true,
-    ...(process.platform === "darwin" ? { type: "panel" } : {}),
-    ...extra,
+    ...(process.platform === "darwin" && asPanel ? { type: "panel" } : {}),
+    ...rest,
   };
 }
 
-function pinToCurrentSpace(win) {
+function installEditMenu() {
+  const isMac = process.platform === "darwin";
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(isMac
+        ? [
+            {
+              label: app.name,
+              submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }],
+            },
+          ]
+        : []),
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+    ])
+  );
+}
+
+function attachClipboard(win) {
   if (!win || win.isDestroyed()) return;
-  win.setAlwaysOnTop(true, "screen-saver");
+  win.webContents.on("context-menu", (_event, params) => {
+    const flags = params.editFlags || {};
+    Menu.buildFromTemplate([
+      { role: "cut", enabled: Boolean(flags.canCut) },
+      { role: "copy", enabled: Boolean(flags.canCopy) },
+      { role: "paste", enabled: Boolean(flags.canPaste) },
+      { type: "separator" },
+      { role: "selectAll" },
+    ]).popup({ window: win });
+  });
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const chord = process.platform === "darwin" ? input.meta : input.control;
+    if (!chord || input.alt || input.shift) return;
+    const key = String(input.key || "").toLowerCase();
+    const contents = win.webContents;
+    if (key === "c") {
+      contents.copy();
+      event.preventDefault();
+    } else if (key === "v") {
+      contents.paste();
+      event.preventDefault();
+    } else if (key === "x") {
+      contents.cut();
+      event.preventDefault();
+    } else if (key === "a") {
+      contents.selectAll();
+      event.preventDefault();
+    }
+  });
+}
+
+function pinToCurrentSpace(win, level = "screen-saver") {
+  if (!win || win.isDestroyed()) return;
+  win.setAlwaysOnTop(true, level);
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 }
 
@@ -218,23 +281,38 @@ function panelIsOpen() {
   return Boolean(panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible());
 }
 
+function setMacForeground(active) {
+  if (process.platform !== "darwin") return;
+  if (typeof app.setActivationPolicy === "function") {
+    app.setActivationPolicy(active ? "regular" : "accessory");
+  }
+  if (app.dock) app.dock.hide();
+  if (active && typeof app.focus === "function") {
+    app.focus({ steal: true });
+  }
+}
+
 function showPanel() {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   paused = true;
   sendPetState();
   pinToCurrentSpace(petWindow);
-  pinToCurrentSpace(panelWindow);
+  pinToCurrentSpace(panelWindow, "floating");
   panelWindow.setBounds(panelPosition());
-  panelWindow.showInactive();
+  setMacForeground(true);
+  panelWindow.show();
   if (typeof panelWindow.moveTop === "function") panelWindow.moveTop();
   panelWindow.focus();
+  panelWindow.webContents.focus();
   panelWindow.webContents.send("panel-data", publicState());
+  panelWindow.webContents.send("panel-shown");
 }
 
 function hidePanel() {
   if (panelWindow && !panelWindow.isDestroyed()) {
     panelWindow.hide();
   }
+  setMacForeground(false);
   paused = false;
   sendPetState();
 }
@@ -599,6 +677,7 @@ function createWindows() {
 
   panelWindow = new BrowserWindow(
     overlayWindowOptions({
+      asPanel: false,
       ...panelPosition(),
       focusable: true,
       show: false,
@@ -609,7 +688,7 @@ function createWindows() {
       },
     })
   );
-  pinToCurrentSpace(panelWindow);
+  pinToCurrentSpace(panelWindow, "floating");
   panelWindow.loadFile(path.join(__dirname, "renderer", "panel.html"));
   panelWindow.on("blur", () => {
     // Keep chat open while typing; only hide if user clicked away and panel requests it.
@@ -858,6 +937,8 @@ app.whenReady().then(() => {
   if (!store.get("reminderFired")) store.set("reminderFired", {});
 
   createWindows();
+  installEditMenu();
+  attachClipboard(panelWindow);
   registerIpc();
 
   tray = new Tray(trayIcon());

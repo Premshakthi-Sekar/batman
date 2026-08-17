@@ -202,4 +202,8 @@ form.addEventListener("submit", async (event) => {
 });
 
 window.batman.onPanelData(applyState);
+window.batman.onPanelShown(() => {
+  const chatOpen = document.getElementById("chat")?.classList.contains("active");
+  if (chatOpen) prompt.focus();
+});
 window.batman.getState().then(applyState);

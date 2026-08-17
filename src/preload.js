@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld("batman", {
   onPanelData(callback) {
     ipcRenderer.on("panel-data", (_event, data) => callback(data));
   },
+  onPanelShown(callback) {
+    ipcRenderer.on("panel-shown", () => callback());
+  },
   petClicked() {
     ipcRenderer.send("pet-clicked");
   },

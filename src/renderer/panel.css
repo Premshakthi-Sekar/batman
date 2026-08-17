@@ -4,6 +4,8 @@ body {
   background: transparent;
   font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   color: #e6e6e6;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .panel {
@@ -162,6 +164,8 @@ button {
   color: #d4d4d4;
   cursor: pointer;
   letter-spacing: 0.06em;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .tab {
@@ -207,6 +211,9 @@ button {
   font-size: 13px;
   line-height: 1.4;
   white-space: pre-wrap;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .bubble.batman {
@@ -241,6 +248,8 @@ select {
   color: #ececec;
   border-radius: 2px;
   padding: 9px 10px;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 input:focus,
@@ -328,6 +337,13 @@ h3 {
   border: 1px solid #6e6e6e;
   border-radius: 2px;
   padding: 7px 8px;
+}
+
+.task-row span,
+.hint,
+.page p {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .task-row.done span {
