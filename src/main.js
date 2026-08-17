@@ -26,6 +26,7 @@ const {
   describeChange,
 } = require("./pa");
 const { INTENT_PROMPT, parseIntentReply, listSnapshot, decideTurn, spokenResult } = require("./intent");
+const { BEAM_MS, beamLayout } = require("./beam");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 340;
@@ -58,6 +59,7 @@ function clearPid() {
 
 let petWindow;
 let panelWindow;
+let beamWindow;
 let tray;
 let store;
 let sleepTimer;
@@ -75,6 +77,7 @@ const wander = {
   targetY: 200,
   facing: 1,
   sleeping: false,
+  beaming: false,
 };
 
 function storePath() {
@@ -133,7 +136,7 @@ function applyPetPosition() {
 }
 
 function walkFrozen() {
-  return paused || dragging || hovering || wander.sleeping;
+  return paused || dragging || hovering || wander.sleeping || wander.beaming;
 }
 
 function sendPetState() {
@@ -142,6 +145,7 @@ function sendPetState() {
     facing: wander.facing,
     sleeping: wander.sleeping,
     paused: walkFrozen(),
+    beaming: wander.beaming,
   });
 }
 
@@ -291,6 +295,62 @@ function notify(title, body) {
   }
 }
 
+function closeBeamWindow() {
+  if (beamWindow && !beamWindow.isDestroyed()) {
+    beamWindow.close();
+  }
+  beamWindow = null;
+  wander.beaming = false;
+  sendPetState();
+}
+
+function fireReminderBeam() {
+  if (!petWindow || petWindow.isDestroyed() || wander.sleeping) return;
+  closeBeamWindow();
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(wander.x + PET_SIZE / 2),
+    y: Math.round(wander.y + PET_SIZE / 2),
+  });
+  const area = display.bounds;
+  const layout = beamLayout(wander.x, wander.y, wander.facing, area);
+  wander.beaming = true;
+  sendPetState();
+  beamWindow = new BrowserWindow(
+    overlayWindowOptions({
+      x: area.x,
+      y: area.y,
+      width: area.width,
+      height: area.height,
+      focusable: false,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    })
+  );
+  beamWindow.setIgnoreMouseEvents(true, { forward: true });
+  pinToCurrentSpace(beamWindow);
+  beamWindow.loadFile(path.join(__dirname, "renderer", "beam.html"), {
+    query: {
+      fromX: String(Math.round(layout.fromX)),
+      fromY: String(Math.round(layout.fromY)),
+      length: String(Math.round(layout.length)),
+      angle: String(layout.angle),
+    },
+  });
+  beamWindow.once("ready-to-show", () => {
+    if (!beamWindow || beamWindow.isDestroyed()) return;
+    beamWindow.showInactive();
+  });
+  beamWindow.on("closed", () => {
+    beamWindow = null;
+    wander.beaming = false;
+    sendPetState();
+  });
+  setTimeout(() => closeBeamWindow(), BEAM_MS);
+}
+
 function tickReminders() {
   if (!store) return;
   const now = new Date();
@@ -300,7 +360,10 @@ function tickReminders() {
   const due = dueReminderSlots(now, times, fired, openTasks(tasks, dateKey(now)).length > 0);
   if (!due.length) return;
   const body = reminderBody(tasks, now);
-  if (body) notify("Batman · daily patrol", body);
+  if (body) {
+    fireReminderBeam();
+    notify("Batman · daily patrol", body);
+  }
   store.set("reminderFired", recordFired(fired, dateKey(now), due));
 }
 
@@ -668,6 +731,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   clearPid();
   stopWander();
+  closeBeamWindow();
   if (sleepTimer) clearTimeout(sleepTimer);
   if (reminderTimer) clearInterval(reminderTimer);
 });

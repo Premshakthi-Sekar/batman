@@ -48,6 +48,11 @@ body {
   box-shadow: 0 0 6px #ffd36a;
 }
 
+.hero.beaming .eye {
+  background: #ff2a2a;
+  box-shadow: 0 0 10px 3px rgba(255, 32, 32, 0.95);
+}
+
 .hero.left .body,
 .hero.left .cape {
   transform: scaleX(-1);

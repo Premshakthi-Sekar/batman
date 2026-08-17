@@ -50,5 +50,6 @@ window.batman.onPetState((state) => {
   hero.classList.toggle("left", state.facing < 0);
   hero.classList.toggle("paused", Boolean(state.paused));
   hero.classList.toggle("sleeping", Boolean(state.sleeping));
+  hero.classList.toggle("beaming", Boolean(state.beaming));
   zzz.hidden = !state.sleeping;
 });
