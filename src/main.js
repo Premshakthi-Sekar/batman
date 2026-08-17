@@ -61,6 +61,7 @@ let wanderTimer;
 let paused = false;
 let dragging = false;
 let hovering = false;
+let dragGrab = { x: 0, y: 0 };
 let reminderTimer;
 
 const wander = {
