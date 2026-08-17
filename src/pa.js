@@ -34,7 +34,9 @@ function parseClock(text) {
   const raw = String(text || "").toLowerCase();
   const withMeridiem = raw.match(/\b(\d{1,2})(?::|\.)?(\d{2})?\s*(a\.?m\.?|p\.?m\.?)\b/);
   const withColon = raw.match(/\b(\d{1,2}):(\d{2})\b/);
-  const hit = withMeridiem || withColon;
+  const withPrep = raw.match(/\b(?:at|to|by|until)\s+(\d{1,2})(?::(\d{2}))?\b(?!\s*calls?\b)/);
+  const withDay = raw.match(/\b(\d{1,2})(?::(\d{2}))?\s*(?:tmrw|tmw|tomorrow|tommorow|morning|mrng)\b/);
+  const hit = withMeridiem || withColon || withPrep || withDay;
   if (!hit) return null;
   let hour = Number(hit[1]);
   const minute = hit[2] ? Number(hit[2]) : 0;
@@ -201,9 +203,18 @@ function sameTask(a, b) {
 
 function looksLikeNudge(text) {
   const lower = String(text || "").toLowerCase();
-  return /\b(did (u|you) add|did (u|you) d(o)? it|didn'?t add|did not add|not added|don'?t think you added|dont tink u added|u did not add|you did not add|still not (on|in) the list|still there|it'?s still|its still)\b/.test(
+  return /\b(did (u|you) add|did (u|you) d(o)? it|did (u|you) finish|didn'?t add|did not add|not added|not (changed|done)|don'?t think you added|dont tink u added|u did not add|you did not add|still not (on|in) the list|still there|it'?s still|its still|its not changed|not changed)\b/.test(
     lower
   );
+}
+
+function looksLikeRetry(text) {
+  return /^(yes|yeah|yep|ok|okay|sure|try again|please|do it)$/i.test(String(text || "").trim());
+}
+
+function looksLikeTimeUpdate(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(change|move|reschedule|push|shift|make it|set|update|must be|should be|needs to be)\b/.test(lower);
 }
 
 function looksLikeComplaint(text) {
@@ -213,7 +224,7 @@ function looksLikeComplaint(text) {
 
 function looksLikeNewEvent(text) {
   const lower = String(text || "").toLowerCase();
-  if (looksLikeListEdit(lower) || looksLikeNudge(lower) || looksLikeComplaint(lower)) return false;
+  if (looksLikeListEdit(lower) || looksLikeNudge(lower) || looksLikeComplaint(lower) || looksLikeTimeUpdate(lower)) return false;
   const scheduling = /\b(i have|i've got|i got|i've a|remind(er)?( me)?|schedule|add a |add the |add to |put (it |this )?on|don'?t forget|meeting with|call with|todo|to-do|to do)\b/.test(
     lower
   );
@@ -303,22 +314,42 @@ function isVagueHint(needle) {
   return /^(that|this|it|the call|the meeting|meeting|call|that meeting|that call|the task)$/.test(needle);
 }
 
+function matchScore(item, needle) {
+  const title = String(item.text || "").toLowerCase();
+  const hint = String(needle || "").toLowerCase().trim();
+  if (!hint) return 0;
+  if (title === hint) return 100;
+  let score = 0;
+  if (title.includes(hint) || hint.includes(title)) score += 6;
+  const itemTokens = new Set(fingerprint(title).split(" ").filter(Boolean));
+  const hintTokens = fingerprint(hint).split(" ").filter(Boolean);
+  let overlap = 0;
+  for (const token of hintTokens) {
+    if (itemTokens.has(token)) overlap += 1;
+  }
+  score += overlap * 3;
+  if (isPrepTask(item.text) && /\b(leads|prep|before)\b/.test(hint)) score += 4;
+  if (isCallish(item.text) && isCallish(hint) && !isPrepTask(hint)) score += 4;
+  return score;
+}
+
 function findTask(list, needle) {
   const open = list.filter((item) => !item.done);
   const cleaned = (cleanTitle(needle) || needle || "").trim().toLowerCase();
   if (!cleaned || isVagueHint(cleaned) || isVagueHint(String(needle || "").trim().toLowerCase())) {
     return open.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))[0];
   }
-  const direct = open.find(
-    (item) => item.text.toLowerCase().includes(cleaned) || cleaned.includes(item.text.toLowerCase())
-  );
-  if (direct) return direct;
-  const fp = fingerprint(cleaned);
-  if (!fp) return undefined;
-  return open.find((item) => {
-    const other = fingerprint(item.text);
-    return other && (other.includes(fp) || fp.includes(other));
-  });
+  let best;
+  let bestScore = 0;
+  for (const item of open) {
+    const score = matchScore(item, cleaned);
+    if (score > bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  if (bestScore >= 3) return best;
+  return undefined;
 }
 
 function shouldRemove(item, needle) {
@@ -455,6 +486,8 @@ function extractPaBlock(text) {
 }
 
 function extractSubject(text) {
+  const quoted = String(text || "").match(/["“”']([^"“”']+)["“”']/);
+  if (quoted) return cleanTitle(quoted[1]) || quoted[1].trim();
   return cleanTitle(
     String(text || "")
       .replace(/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off|move|reschedule|change|push|shift|make it|take off|remove|delete|clear|duplicates?)\b/gi, " ")
@@ -508,13 +541,20 @@ function interpretUserText(text, now = new Date()) {
     return actions;
   }
 
-  if (/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off)\b/.test(lower)) {
+  if (/\b(done|finished|complete(d)?|strike(d)? off|tick(ed)? off|cancel(led)?|crossed off)\b/.test(lower) && !looksLikeTimeUpdate(lower) && !time) {
     if (subject) actions.done.push(subject);
     return actions;
   }
 
-  if (/\b(move|reschedule|change|push|shift|make it)\b/.test(lower) && (time || day) && subject) {
-    actions.update.push({ match: subject, time, day: day || undefined });
+  if (
+    !looksLikeNewEvent(raw) &&
+    (looksLikeTimeUpdate(lower) || isVagueHint(subject) || /\b(leads|before call)\b/.test(lower)) &&
+    (time || day)
+  ) {
+    let match = subject;
+    if (/\bleads\b/i.test(raw)) match = "leads";
+    else if (!match || isVagueHint(match) || match.split(/\s+/).length > 8) match = "it";
+    actions.update.push({ match, time, day: day || undefined });
     return actions;
   }
 
@@ -542,7 +582,7 @@ function captureFromHistory(history, now = new Date()) {
 function captureFromUserText(text, now = new Date(), history = []) {
   const direct = interpretUserText(text, now);
   if (hasWork(direct)) return direct;
-  if (looksLikeNudge(text) || looksLikeComplaint(text)) return captureFromHistory(history, now);
+  if (looksLikeNudge(text) || looksLikeComplaint(text) || looksLikeRetry(text)) return captureFromHistory(history, now);
   return direct;
 }
 
@@ -612,6 +652,14 @@ function describeChange(before, after, userText, actions = emptyActions()) {
       lines.push(`FAILED: still on the list: ${still.map((item) => formatTaskLine(item)).join("; ")}. Do not say it is gone.`);
     } else if (removed.length) {
       lines.push("Delete succeeded. Confirm it is gone. Do not say you will do it later.");
+    }
+  }
+  for (const update of actions.update || []) {
+    const match = findTask(after || [], update.match);
+    if (update.time && (!match || match.time !== update.time)) {
+      lines.push(`FAILED: time is not ${update.time}. Do not say the time change is done.`);
+    } else if (match && update.time) {
+      lines.push(`Time update succeeded: ${formatTaskLine(match)}.`);
     }
   }
   if (actions.removeDuplicates || /\b(2|two|duplicates?)\b/i.test(userText)) {

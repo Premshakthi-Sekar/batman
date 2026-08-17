@@ -71,6 +71,8 @@ test("reminderBody is silent when the day is clear", () => {
 test("parseClock understands 11am", () => {
   assert.equal(parseClock("tmrw 11 am"), "11:00");
   assert.equal(parseClock("2pm"), "14:00");
+  assert.equal(parseClock("to 10 tmrw"), "10:00");
+  assert.equal(parseClock("then change it to 10"), "10:00");
 });
 
 test("captureFromUserText files a tomorrow call from chat", () => {
@@ -232,4 +234,22 @@ test("did u do it replays the delete", () => {
   ];
   const actions = captureFromUserText("did u d it", now, history);
   assert.ok(actions.remove.some((item) => /demi/i.test(item)));
+});
+
+test("change leads to 10 tmrw updates that task only", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  let state = applyPaActions({ tasks: [], facts: [] }, captureFromUserText("i have a call with Demi tmrw 11 AM"), now);
+  state = applyPaActions(state, captureFromUserText("add a reminder tmrw to run a fresh leads for demi before call"), now);
+  const phrase = 'change the "run a fresh leads for demi before call" to 10 tmrw.';
+  const actions = captureFromUserText(phrase);
+  assert.equal(actions.update[0].time, "10:00");
+  state = applyPaActions(state, actions, now);
+  const leads = state.tasks.find((item) => /leads/i.test(item.text));
+  const call = state.tasks.find((item) => /call with demi/i.test(item.text) && !/leads/i.test(item.text));
+  assert.equal(leads.time, "10:00");
+  assert.equal(call.time, "11:00");
+  state = applyPaActions(state, captureFromUserText("then change it to 10"), now);
+  assert.equal(state.tasks.find((item) => /leads/i.test(item.text)).time, "10:00");
+  state = applyPaActions(state, captureFromUserText("thanks but the time must be 10 am"), now);
+  assert.equal(state.tasks.find((item) => /leads/i.test(item.text)).time, "10:00");
 });
