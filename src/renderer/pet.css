@@ -135,25 +135,23 @@ body {
 
 .emblem {
   position: absolute;
-  left: 6px;
+  left: 5px;
   top: 26px;
-  width: 28px;
-  height: 18px;
+  width: 30px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 45%, #ffe27a 0%, #d4af37 70%, #a07c12 100%);
-  border-radius: 50% / 48%;
-  box-shadow:
-    0 0 6px rgba(212, 175, 55, 0.55),
-    0 1px 0 rgba(0, 0, 0, 0.45);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
-.emblem svg {
-  width: 22px;
-  height: 12px;
+.emblem img {
+  width: 30px;
+  height: 16px;
   display: block;
-  fill: #07070a;
+  pointer-events: none;
 }
 
 .belt {

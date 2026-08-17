@@ -97,21 +97,21 @@ header {
 }
 
 .brand .emblem {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 52px;
+  height: 26px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 40%, #fff6c8 0%, #f0c94a 55%, #b8860b 100%);
-  box-shadow: 0 0 12px rgba(240, 201, 74, 0.45);
+  background: transparent;
+  box-shadow: 0 0 14px rgba(255, 210, 0, 0.35);
   flex-shrink: 0;
 }
 
-.brand .emblem svg {
-  width: 26px;
-  height: 14px;
-  fill: #07070a;
+.brand .emblem img {
+  width: 52px;
+  height: 26px;
+  display: block;
 }
 
 .callsign {

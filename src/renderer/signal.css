@@ -40,27 +40,30 @@ body {
 .disc {
   position: absolute;
   left: 50%;
-  top: 28%;
-  width: min(42vmin, 420px);
-  height: min(42vmin, 420px);
+  top: 30%;
+  width: min(56vmin, 560px);
+  height: min(28vmin, 280px);
   transform: translate(-50%, -50%) scale(0.72);
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 46%, rgba(255, 252, 230, 0.98) 0%, rgba(255, 236, 160, 0.92) 42%, rgba(255, 210, 90, 0.35) 70%, transparent 72%);
+  background: radial-gradient(
+    ellipse at 50% 46%,
+    rgba(255, 252, 230, 0.35) 0%,
+    rgba(255, 236, 160, 0.18) 55%,
+    transparent 72%
+  );
   box-shadow:
-    0 0 40px 18px rgba(255, 236, 150, 0.45),
-    0 0 120px 40px rgba(255, 210, 80, 0.22);
+    0 0 40px 18px rgba(255, 236, 150, 0.4),
+    0 0 120px 40px rgba(255, 210, 80, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   animation: disc 2.55s ease-out forwards;
 }
 
-.bat-mark {
-  width: 72%;
+.logo {
+  width: 92%;
   height: auto;
-  fill: #07070a;
-  filter: drop-shadow(0 2px 0 rgba(255, 255, 255, 0.15));
+  filter: drop-shadow(0 0 18px rgba(255, 220, 80, 0.85));
 }
 
 @keyframes sky {
