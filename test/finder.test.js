@@ -1,0 +1,51 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const EventEmitter = require("node:events");
+const {
+  extractFindQuery,
+  looksLikeFindRequest,
+  keepPath,
+  searchHome,
+  formatFindSpoken,
+} = require("../src/finder");
+const { decideTurn } = require("../src/intent");
+
+test("find me this doc pulls the file name", () => {
+  assert.equal(extractFindQuery("find me this doc invoice.pdf"), "invoice.pdf");
+  assert.equal(extractFindQuery("where is tax return"), "tax return");
+  assert.equal(extractFindQuery("find me this doc"), null);
+  assert.equal(looksLikeFindRequest("remind me to drink water"), false);
+});
+
+test("decideTurn routes a find request", () => {
+  const decision = decideTurn({
+    userText: "find me the offer letter",
+    tasks: [],
+    history: [],
+    llmIntent: { action: "chat" },
+    pending: null,
+    now: new Date(),
+  });
+  assert.equal(decision.findQuery, "offer letter");
+});
+
+test("searchHome uses Spotlight paths and reports the exact location", async () => {
+  const home = "/Users/prem";
+  const spawn = (cmd, args) => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.kill = () => {};
+    setImmediate(() => {
+      if (cmd === "mdfind") {
+        child.stdout.emit("data", `${home}/Documents/offer-letter.pdf\n${home}/Library/Caches/junk.pdf\n`);
+      }
+      child.emit("close", 0);
+    });
+    return child;
+  };
+  const result = await searchHome("offer letter", { home, spawn });
+  assert.deepEqual(result.hits, [`${home}/Documents/offer-letter.pdf`]);
+  assert.match(formatFindSpoken(result), /\/Users\/prem\/Documents\/offer-letter\.pdf/);
+});

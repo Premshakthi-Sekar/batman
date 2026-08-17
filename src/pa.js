@@ -808,6 +808,7 @@ function paInstructions() {
     "Read GROUND TRUTH. Only describe what it says. Never say 'updating', 'I will add', or 'done' unless GROUND TRUTH says the change succeeded.",
     "If GROUND TRUTH says FAILED, admit it is still there. Do not pretend.",
     "You CAN set live reminders (in 2 mins, at 12:53am). If GROUND TRUTH says a live reminder is armed, confirm it. Never say you cannot set a reminder.",
+    "If GROUND TRUTH is a file search, quote the exact paths. Never invent a folder.",
     "Keep answers short. No machine JSON.",
   ].join(" ");
 }

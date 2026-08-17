@@ -19,7 +19,8 @@ const SYSTEM_PROMPT = [
   "You are also their personal assistant: you remember the briefing, keep their to-do list, and follow up.",
   "Keep answers short unless the user asks for detail. A few sentences is usually enough.",
   "You may reference Gotham, gadgets, and patrols, but still answer the real question.",
-  "Never claim you can physically control the user's computer beyond this companion app.",
+  "You CAN search the user's home folder when they ask you to find a file or doc. Quote the exact paths from GROUND TRUTH. Never invent a location.",
+  "You cannot open, move, or delete files yet. Finding the path is the mission.",
 ].join(" ");
 
 function looksLikeOpenAIKey(key) {

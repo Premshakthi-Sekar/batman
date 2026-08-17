@@ -29,6 +29,7 @@ const {
 const { INTENT_PROMPT, parseIntentReply, listSnapshot, decideTurn, spokenResult } = require("./intent");
 const { BEAM_MS, beamLayout } = require("./beam");
 const { SIGNAL_MS } = require("./signal");
+const { searchHome, formatFindSpoken, formatFindGround } = require("./finder");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 360;
@@ -746,6 +747,29 @@ function registerIpc() {
       history.push({ role: "assistant", content: decision.question, at: Date.now() });
       store.set("history", history.slice(-120));
       return decision.question;
+    }
+
+    if (decision.findQuery) {
+      store.set("pendingClarify", null);
+      const found = await searchHome(decision.findQuery);
+      const ground = formatFindGround(found);
+      let visible = formatFindSpoken(found);
+      try {
+        const raw = await askBatman({
+          ...askOpts,
+          contextText: [
+            ground,
+            "Confirm in a short Batman line, then list every exact path. Do not invent folders.",
+          ].join("\n\n"),
+        });
+        visible = extractPaBlock(raw).visible || visible;
+      } catch {
+        visible = formatFindSpoken(found);
+      }
+      history.push({ role: "user", content: String(userText).trim(), at: Date.now() });
+      history.push({ role: "assistant", content: visible, at: Date.now() });
+      store.set("history", history.slice(-120));
+      return visible;
     }
 
     store.set("pendingClarify", null);

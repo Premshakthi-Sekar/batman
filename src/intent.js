@@ -15,13 +15,15 @@ const {
   captureFromUserText,
   cleanTitle,
 } = require("./pa");
+const { extractFindQuery, looksLikeFindRequest } = require("./finder");
 
 const INTENT_PROMPT = [
   "You are the PA brain for a desktop Batman. You do not change the list yourself.",
   "Read the open tasks and the user message. Understand messy spelling and shorthand.",
   "Reply with ONLY JSON, no other text:",
-  '{"action":"add|update|remove|complete|dedupe|remind|ask|chat","title":null,"match":null,"time":null,"day":null,"inMinutes":null,"question":null,"confidence":"high|low"}',
+  '{"action":"add|update|remove|complete|dedupe|remind|find|ask|chat","title":null,"match":null,"time":null,"day":null,"inMinutes":null,"question":null,"confidence":"high|low"}',
   "action=remind when they want a live ping: 'in 2 mins', 'in 10 minutes', 'remind me at 12:53am'. Set title, time as HH:MM if given, inMinutes if relative.",
+  "action=find when they want a file on this Mac: 'find me this doc', 'where is invoice.pdf'. Put the search text in title.",
   "Batman CAN fire live reminders with a red eye-beam. Never refuse a timed remind.",
   "action=ask if two tasks could match, a time/day is missing when it matters, or you are not sure. Put the question in question.",
   "time must be 24-hour HH:MM. '10', '10 tmrw', '10am' → 10:00. '2pm' → 14:00. '12.53AM' → 00:53.",
@@ -38,7 +40,7 @@ function parseIntentReply(raw) {
   try {
     const parsed = JSON.parse(text.slice(start, end + 1));
     const action = String(parsed.action || "chat").toLowerCase();
-    const allowed = ["add", "update", "remove", "complete", "dedupe", "remind", "ask", "chat"];
+    const allowed = ["add", "update", "remove", "complete", "dedupe", "remind", "find", "ask", "chat"];
     const inMinutes = Number(parsed.inMinutes);
     return {
       action: allowed.includes(action) ? action : "chat",
@@ -148,6 +150,12 @@ function actionsFromIntent(intent, tasks, userText, now) {
     return { actions };
   }
 
+  if (intent.action === "find") {
+    const query = intent.title || intent.match || extractFindQuery(userText);
+    if (!query) return { question: "What file should I hunt? Give me a name, like invoice.pdf.", pending: null };
+    return { findQuery: query, actions: emptyActions() };
+  }
+
   const needle = intent.match || intent.title || userText;
   const rows = rankedMatches(tasks, needle);
 
@@ -196,6 +204,16 @@ function decideTurn({ userText, tasks, history, llmIntent, pending, now }) {
   const resolvedPending = resolvePending(pending, userText);
   if (pending && resolvedPending && (resolvedPending.actions || resolvedPending.question)) {
     return resolvedPending;
+  }
+
+  const findQuery =
+    extractFindQuery(userText) ||
+    (llmIntent?.action === "find" ? llmIntent.title || llmIntent.match : null);
+  if (findQuery) {
+    return { findQuery, actions: emptyActions() };
+  }
+  if (looksLikeFindRequest(userText) || llmIntent?.action === "find") {
+    return { question: "What file should I hunt? Give me a name, like invoice.pdf.", pending: null };
   }
 
   const certain = localIsCertain(local, tasks);
