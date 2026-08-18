@@ -195,6 +195,21 @@ button {
   display: flex;
 }
 
+.page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.page-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.page-scroll::-webkit-scrollbar-thumb {
+  background: #6e6e6e;
+  border-radius: 4px;
+}
+
 .log {
   flex: 1;
   overflow: auto;
@@ -324,8 +339,6 @@ h3 {
   flex-direction: column;
   gap: 4px;
   margin-bottom: 8px;
-  max-height: 120px;
-  overflow: auto;
 }
 
 .task-row {
@@ -356,6 +369,8 @@ h3 {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  flex-shrink: 0;
+  padding-top: 8px;
 }
 
 .times input {
