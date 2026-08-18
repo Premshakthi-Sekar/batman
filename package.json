@@ -1,0 +1,23 @@
+{
+  "name": "desktop-batman",
+  "version": "1.0.0",
+  "description": "A tiny Batman that wanders your desktop, takes naps, and answers questions.",
+  "main": "src/main.js",
+  "author": "Premshakthi Sekar",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node scripts/ensure-electron.js",
+    "postinstall": "node scripts/ensure-electron.js --download-only",
+    "test": "node --test test/*.test.js"
+  },
+  "allowScripts": {
+    "electron": true
+  },
+  "dependencies": {
+    "electron": "^33.2.1"
+  },
+  "devDependencies": {}
+}

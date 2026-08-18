@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Ask Batman</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+      <div class="scan"></div>
+
+      <header>
+        <div class="brand">
+          <span class="emblem" aria-hidden="true">
+            <img src="batman-mark.svg" alt="" draggable="false" />
+          </span>
+          <div>
+            <div class="callsign">WayneTech · Link live</div>
+            <strong>BATMAN</strong>
+            <p id="status">ON PATROL</p>
+          </div>
+        </div>
+        <button id="close" type="button" aria-label="Close">×</button>
+      </header>
+
+      <nav>
+        <button class="tab active" data-tab="chat" type="button">Ask</button>
+        <button class="tab" data-tab="tasks" type="button">Today</button>
+        <button class="tab" data-tab="notes" type="button">Notes</button>
+        <button class="tab" data-tab="sleep" type="button">Sleep</button>
+        <button class="tab" data-tab="settings" type="button">Settings</button>
+      </nav>
+
+      <section id="chat" class="page active">
+        <div id="log" class="log">
+          <div class="bubble batman">
+            Talk messy if you want. If I can’t tell which task you mean, I’ll ask — I won’t pretend it’s done.
+          </div>
+        </div>
+        <form id="ask-form">
+          <input id="prompt" type="text" placeholder="find me invoice.pdf" autocomplete="off" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section id="tasks" class="page">
+        <div class="page-scroll">
+          <p class="hint" id="briefing-line">No tasks yet. Tell me in Ask — no need to type them here.</p>
+          <h3>Live reminders</h3>
+          <div id="live-pings" class="task-list"></div>
+          <h3>Today</h3>
+          <div id="tasks-today" class="task-list"></div>
+          <h3>Tomorrow</h3>
+          <div id="tasks-tomorrow" class="task-list"></div>
+        </div>
+        <form id="task-form" class="task-form">
+          <input id="task-text" type="text" placeholder="Add a task..." autocomplete="off" />
+          <select id="task-when">
+            <option value="tomorrow">Tomorrow</option>
+            <option value="today">Today</option>
+          </select>
+          <button type="submit">Add</button>
+        </form>
+      </section>
+
+      <section id="notes" class="page">
+        <div class="page-scroll" id="notes-list"></div>
+        <button id="new-note" type="button">New note</button>
+      </section>
+
+      <section id="sleep" class="page">
+        <p>Need him off the screen for a while? He hides, then the bat-signal brings him back.</p>
+        <div class="actions">
+          <button data-hours="2" type="button">Sleep 2 hours</button>
+          <button data-hours="3" type="button">Sleep 3 hours</button>
+          <button data-hours="4" type="button">Sleep 4 hours</button>
+        </div>
+        <button id="wake" class="ghost" type="button">Wake up now</button>
+        <button id="quit" class="danger" type="button">Quit Batman</button>
+      </section>
+
+      <section id="settings" class="page">
+        <label>
+          Provider
+          <select id="provider">
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini (free)</option>
+          </select>
+        </label>
+        <label>
+          <span id="key-label">OpenAI API key</span>
+          <input id="api-key" type="password" placeholder="sk-..." autocomplete="off" />
+        </label>
+        <label>
+          Model
+          <input id="model" type="text" value="gpt-4o-mini" />
+        </label>
+        <p id="key-hint" class="hint">
+          Get a key from platform.openai.com. On Mac it is stored with the Keychain (encrypted blob in batman.json, not the raw key).
+        </p>
+        <label>
+          Four reminder times (next day)
+          <div class="times">
+            <input id="t1" type="time" value="09:00" />
+            <input id="t2" type="time" value="12:00" />
+            <input id="t3" type="time" value="16:00" />
+            <input id="t4" type="time" value="21:00" />
+          </div>
+        </label>
+        <p class="hint">
+          Reminders keep firing during Sleep (notification + red beam). Full Quit stops them.
+          Live pings: “remind me in 2 mins”.
+        </p>
+        <p id="key-status" class="hint"></p>
+        <button id="save" type="button">Save</button>
+      </section>
+    </div>
+    <script src="panel.js"></script>
+  </body>
+</html>
