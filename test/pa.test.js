@@ -8,6 +8,7 @@ const {
   addTasks,
   markDone,
   toggleTask,
+  tasksForDate,
   dueReminderSlots,
   recordFired,
   extractPaBlock,
@@ -103,9 +104,16 @@ test("updateTasks changes the meeting time", () => {
 });
 
 test("toggleTask flips done", () => {
-  const tasks = addTasks([], ["Write"], "2026-08-18", new Date("2026-08-17T21:00:00"));
+  const day = "2026-08-18";
+  const now = new Date("2026-08-17T21:00:00");
+  const tasks = addTasks([], ["Write"], day, now);
   const next = toggleTask(tasks, tasks[0].id);
   assert.equal(next[0].done, true);
+  const listed = tasksForDate(next, day);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].done, true);
+  const gone = listed.filter((item) => !item.done);
+  assert.equal(gone.length, 0);
 });
 
 test("captureFromUserText keeps mrng 11am as one tomorrow call", () => {

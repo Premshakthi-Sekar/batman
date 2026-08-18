@@ -372,7 +372,12 @@ function addTasks(tasks, titles, forDate, now = new Date()) {
 function tasksForDate(tasks, day) {
   return (Array.isArray(tasks) ? tasks : [])
     .filter((item) => item && item.forDate === day)
-    .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99") || a.text.localeCompare(b.text));
+    .sort(
+      (a, b) =>
+        Number(Boolean(a.done)) - Number(Boolean(b.done)) ||
+        (a.time || "99:99").localeCompare(b.time || "99:99") ||
+        a.text.localeCompare(b.text)
+    );
 }
 
 function openTasks(tasks, day) {
