@@ -163,6 +163,8 @@ function queueNoteSave(id, text, immediate) {
   }
   noteTimers.set(id, setTimeout(run, 400));
 }
+
+function applyState(state) {
   if (!state) return;
   status.textContent = state.asleep ? `Sleeping · ${state.remaining} left` : "On patrol";
   if (state.provider) provider.value = state.provider;
@@ -214,7 +216,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => showTab(tab.dataset.tab));
 });
 
-document.getElementById("new-note").addEventListener("click", async () => {
+document.getElementById("new-note")?.addEventListener("click", async () => {
   showTab("notes");
   applyState(await window.batman.addNote());
   const first = notesList.querySelector("textarea");
