@@ -49,9 +49,18 @@ function parseClock(text) {
 
 function inferDay(text) {
   const raw = String(text || "").toLowerCase();
+  if (wantsBothDays(raw)) return "both";
   if (/\b(tmrw|tmw|tomorrow|tommorow|tommorrow|next day)\b/.test(raw)) return "tomorrow";
   if (/\b(today|tonight|this afternoon|this evening|this morning)\b/.test(raw)) return "today";
   return null;
+}
+
+function wantsBothDays(text) {
+  const raw = String(text || "").toLowerCase();
+  if (/\bboth days\b/.test(raw)) return true;
+  const today = /\b(today|tonight)\b/.test(raw);
+  const tomorrow = /\b(tmrw|tmw|tomorrow|tommorow|tommorrow)\b/.test(raw);
+  return today && tomorrow;
 }
 
 function parseDelay(text) {
@@ -189,6 +198,7 @@ function cleanTitle(text) {
       .replace(/\bin\s+\d+(?:\.\d+)?\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b/gi, " ")
       .replace(/\b(tmrw|tmw|tomorrow|tommorow|tommorrow|today|tonight|please|pls)\b/gi, " ")
       .replace(/\b(mrng|morning|afternoon|evening|noon|night)\b/gi, " ")
+      .replace(/\b(a new|the new|new one)\b/gi, " ")
       .replace(/\b(i have|i've got|i got|i've a|i will|i'll|let me|remind me( to)?|(a |the )?reminders?\s*(to|for)?|add|put|schedule|'s time|time)\b/gi, " ")
       .replace(/\b(a call|calls?)\b/gi, "call")
       .replace(/\b(at|on|for|with)\s+(?=\d)/gi, " ")
@@ -294,9 +304,16 @@ function looksLikeNewEvent(text) {
   const scheduling = /\b(i have|i've got|i got|i've a|remind(er)?( me)?|schedule|add a |add the |add to |put (it |this )?on|don'?t forget|meeting with|call with|todo|to-do|to do)\b/.test(
     lower
   );
-  const dated = Boolean(inferDay(lower) || parseClock(lower));
-  const action = /\b(run|call|meet|meeting|email|send|prep|prepare|write|buy|pay|review|leads|todo|to-do)\b/.test(lower);
+  const dated = Boolean(inferDay(lower) || parseClock(lower) || wantsBothDays(lower));
+  const action = /\b(run|call|meet|meeting|email|send|prep|prepare|write|buy|pay|review|leads|todo|to-do|finish|compliance|doc)\b/.test(lower);
   return (scheduling && (dated || action)) || (dated && action);
+}
+
+function looksLikeAddNewInstead(text) {
+  const lower = String(text || "").toLowerCase();
+  return /\b(don'?t update|do not update|dont update|neither|none of (them|those)|not (those|them|that)|new one|n\s*ew one|a new one|add a new|add new|not 1 or 2|leave them|skip (those|them|it)|neither of those)\b/.test(
+    lower
+  );
 }
 
 function looksLikeHardDelete(text) {
@@ -309,6 +326,18 @@ function looksLikeHardDelete(text) {
 function looksLikeListEdit(text) {
   const lower = String(text || "").toLowerCase();
   return /\b(duplicates?|take off|remove|delete|clear (the )?duplicates?|strike(d)? off)\b/.test(lower);
+}
+
+function pushDatedItem(actions, item, day, sourceText) {
+  if (!actions || !item || !item.text) return;
+  const both = wantsBothDays(sourceText) || day === "both";
+  if (both) {
+    actions.addToday.push({ ...item });
+    actions.addTomorrow.push({ ...item });
+    return;
+  }
+  if (day === "today") actions.addToday.push(item);
+  else actions.addTomorrow.push(item);
 }
 
 function newTask(item, forDate, now = new Date()) {
@@ -329,9 +358,8 @@ function addTasks(tasks, titles, forDate, now = new Date()) {
   for (const title of titles || []) {
     const task = newTask(title, forDate, now);
     if (!task) continue;
-    const existing = list.find((item) => !item.done && sameTask(item, task));
+    const existing = list.find((item) => !item.done && item.forDate === forDate && sameTask(item, task));
     if (existing) {
-      if (forDate > existing.forDate) existing.forDate = forDate;
       if (task.time) existing.time = task.time;
       if (task.text && task.text.length < existing.text.length) existing.text = task.text;
       continue;
@@ -366,7 +394,12 @@ function tidyTasks(tasks) {
       kept.push(copy);
       continue;
     }
-    const existing = kept.find((row) => !row.done && sameTask(row, copy));
+    const existing = kept.find((row) => {
+      if (row.done || !sameTask(row, copy)) return false;
+      if (row.forDate === copy.forDate) return true;
+      if (row.time && copy.time && row.time === copy.time) return false;
+      return true;
+    });
     if (existing) {
       mergePair(existing, copy);
       continue;
@@ -627,8 +660,7 @@ function interpretUserText(text, now = new Date()) {
           day: day || "today",
         });
         const item = { text: title, time: time || (delay ? hhmmFromDelay(delay, now) : null) };
-        if (day === "tomorrow" && !delay) actions.addTomorrow.push(item);
-        else actions.addToday.push(item);
+        pushDatedItem(actions, item, day, raw);
         return actions;
       }
     }
@@ -670,9 +702,7 @@ function interpretUserText(text, now = new Date()) {
   }
 
   if (looksLikeNewEvent(raw) && subject && isLikelyTask(subject)) {
-    const item = { text: subject, time };
-    if (day === "today") actions.addToday.push(item);
-    else actions.addTomorrow.push(item);
+    pushDatedItem(actions, { text: subject, time }, day, raw);
   }
   return actions;
 }
@@ -693,7 +723,9 @@ function captureFromHistory(history, now = new Date()) {
 function captureFromUserText(text, now = new Date(), history = []) {
   const direct = interpretUserText(text, now);
   if (hasWork(direct)) return direct;
-  if (looksLikeNudge(text) || looksLikeComplaint(text) || looksLikeRetry(text)) return captureFromHistory(history, now);
+  if (looksLikeNudge(text) || looksLikeComplaint(text) || looksLikeRetry(text) || looksLikeAddNewInstead(text)) {
+    return captureFromHistory(history, now);
+  }
   return direct;
 }
 
@@ -819,6 +851,11 @@ module.exports = {
   tomorrowKey,
   normalizeTime,
   parseClock,
+  looksLikeAddNewInstead,
+  looksLikeNewEvent,
+  wantsBothDays,
+  pushDatedItem,
+  extractSubject,
   inferDay,
   parseDelay,
   looksLikeLiveRemind,

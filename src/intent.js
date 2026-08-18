@@ -14,6 +14,11 @@ const {
   isCallish,
   captureFromUserText,
   cleanTitle,
+  looksLikeAddNewInstead,
+  looksLikeNewEvent,
+  wantsBothDays,
+  pushDatedItem,
+  extractSubject,
 } = require("./pa");
 const { extractFindQuery, looksLikeFindRequest } = require("./finder");
 
@@ -28,7 +33,9 @@ const INTENT_PROMPT = [
   "action=ask if two tasks could match, a time/day is missing when it matters, or you are not sure. Put the question in question.",
   "time must be 24-hour HH:MM. '10', '10 tmrw', '10am' → 10:00. '2pm' → 14:00. '12.53AM' → 00:53.",
   "If they say before the call and a call exists, use one hour before that call unless they gave a time.",
-  "Do not add a second copy of a task that already exists; update it.",
+  "Do not add a second copy of a task that already exists unless they say it is a new one or don't update the old ones.",
+  "today AND tomorrow means two list items, same title and time, one on each day.",
+  "If they say don't update / new one / neither, action=add. Never keep asking 1 or 2 about unrelated tasks.",
   "chat = conversation only, no list change.",
   "If a local parser already has a clear list edit, live remind, or file hunt, it wins. Do not contradict it.",
 ].join(" ");
@@ -97,10 +104,36 @@ function pendingFromRows(rows, fields) {
   };
 }
 
+function looksLikeWhichTaskQuestion(question) {
+  return /\b(which one|which task|reply 1|1 or 2|call or|leads or)\b/i.test(String(question || ""));
+}
+
+function addActionsFromPending(pending, userText, now) {
+  const actions = emptyActions();
+  const time = parseClock(userText) || pending.time || null;
+  const title = pending.title || extractSubject(userText);
+  if (!title) return { question: "What should I add, and for which day?", pending: null };
+  const day = wantsBothDays(userText) || pending.day === "both" ? "both" : inferDay(userText) || pending.day;
+  pushDatedItem(actions, { text: title, time }, day, `${pending.title || ""} ${userText}`);
+  return { actions, pending: null, replyHint: `New item: ${title}${time ? ` at ${time}` : ""}` };
+}
+
 function resolvePending(pending, userText) {
-  if (!pending || !pending.choices || !pending.choices.length) return null;
+  if (!pending) return null;
   const lower = String(userText || "").toLowerCase().trim();
-  const indexMatch = lower.match(/^([12])\b/);
+  if (looksLikeAddNewInstead(userText) || (looksLikeNewEvent(userText) && pending.action !== "add")) {
+    return { skipPending: true, pending: null };
+  }
+  if (pending.action === "add" || pending.awaiting === "time") {
+    if (parseClock(userText) || /\b(no time|whenever|any time|untimed)\b/i.test(lower)) {
+      return addActionsFromPending(pending, userText);
+    }
+    if (!pending.choices || !pending.choices.length) {
+      return { question: pending.question || "What time should I put on the new item? Say 12pm, or no time.", pending };
+    }
+  }
+  if (!pending.choices || !pending.choices.length) return null;
+  const indexMatch = lower.match(/^(?:option\s*)?([12])(?:\s*[.)]|\s*$)/);
   let picked = null;
   if (indexMatch) picked = pending.choices[Number(indexMatch[1]) - 1];
   else if (/\bleads|prep\b/.test(lower)) picked = pending.choices.find((item) => isPrepTask(item.text));
@@ -113,7 +146,7 @@ function resolvePending(pending, userText) {
   if (pending.action === "remove") actions.remove.push(match);
   else if (pending.action === "complete") actions.done.push(match);
   else {
-    actions.update.push({ match, time: pending.time || null, day: pending.day || undefined });
+    actions.update.push({ match, time: pending.time || parseClock(userText) || null, day: pending.day || undefined });
   }
   return { actions, pending: null, replyHint: `Using: ${formatTaskLine(picked)}` };
 }
@@ -146,8 +179,7 @@ function actionsFromIntent(intent, tasks, userText, now) {
     }
     actions.pings.push({ text: title, delayMs: delayMs || null, time: time || null, day: day || "today" });
     const item = { text: title, time: time || null };
-    if (day === "tomorrow" && !delayMs) actions.addTomorrow.push(item);
-    else actions.addToday.push(item);
+    pushDatedItem(actions, item, day || "today", userText);
     return { actions };
   }
 
@@ -162,15 +194,13 @@ function actionsFromIntent(intent, tasks, userText, now) {
 
   if (intent.action === "add") {
     const existing = findTask(tasks, needle);
-    if (existing && !/\b(add another|new)\b/i.test(userText)) {
+    if (existing && !/\b(add another|new)\b/i.test(userText) && !looksLikeAddNewInstead(userText) && !wantsBothDays(userText)) {
       actions.update.push({ match: existing.text, time, day: day || undefined });
       return { actions };
     }
     const title = intent.title || intent.match;
     if (!title) return { question: "What should I add to the list?", pending: null };
-    const item = { text: title, time };
-    if (day === "today") actions.addToday.push(item);
-    else actions.addTomorrow.push(item);
+    pushDatedItem(actions, { text: title, time }, day, userText);
     return { actions };
   }
 
@@ -201,12 +231,13 @@ function actionsFromIntent(intent, tasks, userText, now) {
 }
 
 // First match wins when local parsers and the LLM disagree:
-// 1. pending 1/2  2. local find  3. LLM find  4. certain local list/ping
+// 1. pending 1/2 (unless they say new one / don't update)
+// 2. local find  3. LLM find  4. certain local list/ping/add
 // 5. LLM ask  6. LLM actions  7. remaining local work  8. chat
 function decideTurn({ userText, tasks, history, llmIntent, pending, now }) {
   const local = captureFromUserText(userText, now, history);
   const resolvedPending = resolvePending(pending, userText);
-  if (pending && resolvedPending && (resolvedPending.actions || resolvedPending.question)) {
+  if (pending && resolvedPending && !resolvedPending.skipPending && (resolvedPending.actions || resolvedPending.question)) {
     return resolvedPending;
   }
 
@@ -224,19 +255,43 @@ function decideTurn({ userText, tasks, history, llmIntent, pending, now }) {
 
   const certain = localIsCertain(local, tasks);
   if (certain) {
-    return { actions: local };
+    const item = local.addToday?.[0] || local.addTomorrow?.[0];
+    if (item && !item.time && !local.pings?.length && !local.update?.length && !local.remove?.length) {
+      return {
+        question: `What time do you want on "${item.text}"? Say 12pm, or no time.`,
+        pending: {
+          action: "add",
+          title: item.text,
+          day: local.addToday?.length && local.addTomorrow?.length ? "both" : local.addToday?.length ? "today" : "tomorrow",
+          awaiting: "time",
+          choices: [],
+        },
+      };
+    }
+    return { actions: local, pending: null };
   }
   if (llmIntent?.action === "ask" && llmIntent.question && !certain) {
+    if (!looksLikeWhichTaskQuestion(llmIntent.question) && (looksLikeNewEvent(userText) || /\badd\b/i.test(userText))) {
+      return {
+        question: llmIntent.question,
+        pending: {
+          action: "add",
+          title: llmIntent.title || extractSubject(userText),
+          day: wantsBothDays(userText) ? "both" : llmIntent.day || inferDay(userText),
+          awaiting: "time",
+          choices: [],
+        },
+      };
+    }
     const needle = llmIntent.match || userText;
     const rows = rankedMatches(tasks, needle);
-    const fallbackRows = (Array.isArray(tasks) ? tasks : [])
-      .filter((item) => !item.done)
-      .slice(0, 2)
-      .map((item) => ({ item, score: 1 }));
-    const choices = rows.length >= 2 ? rows.slice(0, 2) : rows.length ? rows : fallbackRows;
+    const choices = rows.length >= 2 ? rows.slice(0, 2) : [];
+    if (!choices.length) {
+      return { question: llmIntent.question, pending: null };
+    }
     return {
       question: llmIntent.question,
-      pending: choices.length ? pendingFromRows(choices, { action: "update", time: llmIntent.time, day: llmIntent.day }) : null,
+      pending: pendingFromRows(choices, { action: "update", time: llmIntent.time, day: llmIntent.day }),
     };
   }
 
@@ -284,6 +339,10 @@ function hasLocalWork(actions) {
 
 function localIsCertain(local, tasks) {
   if (local?.pings?.length) return true;
+  if ((local?.addToday?.length || local?.addTomorrow?.length) && !local.update?.length) {
+    const item = local.addToday[0] || local.addTomorrow[0];
+    return Boolean(item?.text && String(item.text).trim().length >= 3 && !isVague(item.text));
+  }
   if (!hasLocalWork(local)) return false;
   const needle = local.update[0]?.match || local.remove[0] || local.done[0];
   if (!needle || isVague(needle)) return false;

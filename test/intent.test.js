@@ -140,3 +140,66 @@ test("local find beats a contradicting LLM add", () => {
   assert.equal(decision.findQuery, "invoice.pdf");
   assert.equal((decision.actions.addTomorrow || []).length, 0);
 });
+
+test("add compliance today and tmrw asks for time, not which Demi task", () => {
+  const decision = decideTurn({
+    userText: "add a compliance doc finish today and tmrw",
+    tasks,
+    history: [],
+    llmIntent: {
+      action: "ask",
+      question: "What time do you want to finish the compliance doc today and tomorrow?",
+      title: "compliance doc",
+      match: null,
+      time: null,
+      day: null,
+      confidence: "low",
+    },
+    pending: null,
+    now,
+  });
+  assert.ok(decision.question);
+  assert.equal(decision.pending.action, "add");
+  assert.equal(decision.pending.awaiting, "time");
+  assert.equal((decision.pending.choices || []).length, 0);
+});
+
+test("12pm after an add-time prompt files today and tomorrow", () => {
+  const pending = {
+    action: "add",
+    title: "finish compliance doc",
+    day: "both",
+    awaiting: "time",
+    choices: [],
+  };
+  const next = resolvePending(pending, "12 PM");
+  assert.equal(next.actions.addToday[0].time, "12:00");
+  assert.equal(next.actions.addTomorrow[0].time, "12:00");
+  assert.match(next.actions.addToday[0].text, /compliance/i);
+});
+
+test("don't update add a new one leaves the Demi 1 or 2 trap", () => {
+  const pending = {
+    action: "update",
+    time: "12:00",
+    day: "today",
+    choices: [
+      { id: "1", text: "call with Demi", time: "11:00" },
+      { id: "2", text: "run a fresh leads for demi before call", time: "10:00" },
+    ],
+  };
+  const decision = decideTurn({
+    userText: "no, i want u to add a new reminder to finish compliance doc today and tmrw at 12 pm",
+    tasks,
+    history: [{ role: "user", content: "add a compliance doc finish today and tmrw" }],
+    llmIntent: { action: "ask", question: "Which one should I update? Reply 1 or 2.", confidence: "low" },
+    pending,
+    now,
+  });
+  assert.equal(decision.question, undefined);
+  assert.equal(decision.actions.addToday.length, 1);
+  assert.equal(decision.actions.addTomorrow.length, 1);
+  assert.equal(decision.actions.addToday[0].time, "12:00");
+  assert.match(decision.actions.addToday[0].text, /compliance/i);
+  assert.equal((decision.actions.update || []).length, 0);
+});

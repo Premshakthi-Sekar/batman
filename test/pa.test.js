@@ -288,3 +288,21 @@ test("add a reminder tmrw is still a list item, not a live ping", () => {
   assert.equal(actions.pings.length, 0);
   assert.equal(actions.addTomorrow.length, 1);
 });
+
+test("compliance doc today and tmrw at 12pm becomes two list items", () => {
+  const now = new Date("2026-08-17T21:00:00");
+  const actions = captureFromUserText(
+    "add a new reminder to finish compliance doc today and tmrw at 12 pm",
+    now
+  );
+  assert.equal(actions.addToday.length, 1);
+  assert.equal(actions.addTomorrow.length, 1);
+  assert.equal(actions.addToday[0].time, "12:00");
+  assert.equal(actions.addTomorrow[0].time, "12:00");
+  const next = applyPaActions({ tasks: [], facts: [] }, actions, now);
+  const today = next.tasks.filter((item) => item.forDate === dateKey(now));
+  const tomorrow = next.tasks.filter((item) => item.forDate === tomorrowKey(now));
+  assert.equal(today.length, 1);
+  assert.equal(tomorrow.length, 1);
+  assert.match(today[0].text, /compliance/i);
+});
