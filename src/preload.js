@@ -48,6 +48,15 @@ contextBridge.exposeInMainWorld("batman", {
   toggleTask(id) {
     return ipcRenderer.invoke("toggle-task", id);
   },
+  addNote() {
+    return ipcRenderer.invoke("add-note");
+  },
+  updateNote(payload) {
+    return ipcRenderer.invoke("update-note", payload);
+  },
+  deleteNote(id) {
+    return ipcRenderer.invoke("delete-note", id);
+  },
   ask(text) {
     return ipcRenderer.invoke("ask", text);
   },

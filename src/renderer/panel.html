@@ -30,6 +30,7 @@
       <nav>
         <button class="tab active" data-tab="chat" type="button">Ask</button>
         <button class="tab" data-tab="tasks" type="button">Today</button>
+        <button class="tab" data-tab="notes" type="button">Notes</button>
         <button class="tab" data-tab="sleep" type="button">Sleep</button>
         <button class="tab" data-tab="settings" type="button">Settings</button>
       </nav>
@@ -64,6 +65,11 @@
           </select>
           <button type="submit">Add</button>
         </form>
+      </section>
+
+      <section id="notes" class="page">
+        <div class="page-scroll" id="notes-list"></div>
+        <button id="new-note" type="button">New note</button>
       </section>
 
       <section id="sleep" class="page">

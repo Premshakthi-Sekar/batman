@@ -12,6 +12,8 @@ const briefingLine = document.getElementById("briefing-line");
 const tasksToday = document.getElementById("tasks-today");
 const tasksTomorrow = document.getElementById("tasks-tomorrow");
 const livePings = document.getElementById("live-pings");
+const notesList = document.getElementById("notes-list");
+const noteTimers = new Map();
 
 const DEFAULTS = {
   gemini: "gemini-3.7-flash",
@@ -87,7 +89,80 @@ function renderPings(node, items) {
   });
 }
 
-function applyState(state) {
+function renderNotes(notes) {
+  if (!notesList) return;
+  const items = Array.isArray(notes) ? notes : [];
+  const focused = document.activeElement;
+  const focusedId = focused && focused.dataset ? focused.dataset.noteId : "";
+  const selection = focusedId
+    ? { start: focused.selectionStart, end: focused.selectionEnd }
+    : null;
+  const currentIds = [...notesList.querySelectorAll(".sticky")].map((node) => node.dataset.id);
+  const nextIds = items.map((item) => item.id);
+  const sameLayout = currentIds.length === nextIds.length && currentIds.every((id, index) => id === nextIds[index]);
+  if (sameLayout) {
+    items.forEach((item) => {
+      const area = notesList.querySelector(`textarea[data-note-id="${item.id}"]`);
+      if (area && document.activeElement !== area) area.value = item.text || "";
+    });
+    return;
+  }
+  notesList.innerHTML = "";
+  if (!items.length) {
+    notesList.innerHTML = '<p class="hint">Click Batman, open Notes, tap New note, and type. These stay on this Mac like stickies.</p>';
+    return;
+  }
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "sticky";
+    card.dataset.id = item.id;
+    const top = document.createElement("div");
+    top.className = "sticky-top";
+    const del = document.createElement("button");
+    del.className = "sticky-del";
+    del.type = "button";
+    del.setAttribute("aria-label", "Delete note");
+    del.textContent = "×";
+    del.addEventListener("click", async () => {
+      applyState(await window.batman.deleteNote(item.id));
+    });
+    top.append(del);
+    const area = document.createElement("textarea");
+    area.dataset.noteId = item.id;
+    area.value = item.text || "";
+    area.placeholder = "Type a quick note…";
+    area.addEventListener("input", () => queueNoteSave(item.id, area.value));
+    area.addEventListener("blur", () => queueNoteSave(item.id, area.value, true));
+    card.append(top, area);
+    notesList.appendChild(card);
+  });
+  if (focusedId) {
+    const again = notesList.querySelector(`textarea[data-note-id="${focusedId}"]`);
+    if (again) {
+      again.focus();
+      if (selection) {
+        try {
+          again.setSelectionRange(selection.start, selection.end);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+}
+
+function queueNoteSave(id, text, immediate) {
+  if (noteTimers.has(id)) clearTimeout(noteTimers.get(id));
+  const run = async () => {
+    noteTimers.delete(id);
+    applyState(await window.batman.updateNote({ id, text }));
+  };
+  if (immediate) {
+    run();
+    return;
+  }
+  noteTimers.set(id, setTimeout(run, 400));
+}
   if (!state) return;
   status.textContent = state.asleep ? `Sleeping · ${state.remaining} left` : "On patrol";
   if (state.provider) provider.value = state.provider;
@@ -109,6 +184,7 @@ function applyState(state) {
   renderTaskList(tasksToday, state.tasksToday);
   renderTaskList(tasksTomorrow, state.tasksTomorrow);
   renderPings(livePings, state.pings);
+  renderNotes(state.notes);
   if (!paintedHistory && state.history && state.history.length) {
     paintedHistory = true;
     log.innerHTML = "";
@@ -136,6 +212,13 @@ provider.addEventListener("change", () => {
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => showTab(tab.dataset.tab));
+});
+
+document.getElementById("new-note").addEventListener("click", async () => {
+  showTab("notes");
+  applyState(await window.batman.addNote());
+  const first = notesList.querySelector("textarea");
+  if (first) first.focus();
 });
 
 document.getElementById("close").addEventListener("click", () => {

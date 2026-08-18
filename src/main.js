@@ -31,6 +31,7 @@ const { INTENT_PROMPT, parseIntentReply, listSnapshot, decideTurn, spokenResult 
 const { BEAM_MS, beamLayout } = require("./beam");
 const { SIGNAL_MS } = require("./signal");
 const { searchHome, formatFindSpoken, formatFindGround } = require("./finder");
+const { listNotes, addNote, updateNote, removeNote } = require("./notes");
 
 const PET_SIZE = 96;
 const PANEL_WIDTH = 360;
@@ -373,6 +374,7 @@ function publicState() {
     reminderTimes: reminderTimes(store.get("reminderTimes", DEFAULT_REMINDER_TIMES)),
     facts: store.get("facts", []),
     pings: upcomingPings(store.get("pings", [])),
+    notes: listNotes(store.get("notes", [])),
     history: (store.get("history", []) || []).slice(-16),
     briefing: briefing(tasks, store.get("facts", []), now),
   };
@@ -791,6 +793,23 @@ function registerIpc() {
     return publicState();
   });
 
+  ipcMain.handle("add-note", () => {
+    store.set("notes", addNote(store.get("notes", []), ""));
+    return publicState();
+  });
+
+  ipcMain.handle("update-note", (_event, payload) => {
+    const id = payload && payload.id;
+    const text = payload && typeof payload.text === "string" ? payload.text : "";
+    store.set("notes", updateNote(store.get("notes", []), id, text));
+    return publicState();
+  });
+
+  ipcMain.handle("delete-note", (_event, id) => {
+    store.set("notes", removeNote(store.get("notes", []), id));
+    return publicState();
+  });
+
   ipcMain.handle("ask", async (_event, userText) => {
     const now = new Date();
     const history = [...(store.get("history", []) || [])];
@@ -947,6 +966,7 @@ app.whenReady().then(() => {
   if (!store.get("tasks")) store.set("tasks", []);
   if (!store.get("facts")) store.set("facts", []);
   if (!store.get("pings")) store.set("pings", []);
+  if (!store.get("notes")) store.set("notes", []);
   if (!store.get("reminderTimes")) store.set("reminderTimes", DEFAULT_REMINDER_TIMES);
   if (!store.get("reminderFired")) store.set("reminderFired", {});
 
